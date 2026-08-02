@@ -15,12 +15,21 @@ type Topology struct {
 	SameFabric string `yaml:"sameFabric" json:"sameFabric"`
 }
 
+// Queue groups jobs under a weighted, resource-capped admission boundary.
+type Queue struct {
+	Name       string   `yaml:"name" json:"name"`
+	Weight     int      `yaml:"weight" json:"weight"`
+	Capability Resource `yaml:"capability" json:"capability"`
+	Allocated  Resource `yaml:"-" json:"allocated"`
+}
+
 // Job describes identical task replicas that must reach MinAvailable together.
 type Job struct {
 	Name         string    `yaml:"name" json:"name"`
 	MinAvailable int       `yaml:"minAvailable" json:"minAvailable"`
 	Replicas     int       `yaml:"replicas" json:"replicas"`
 	Request      Resource  `yaml:"request" json:"request"`
+	Queue        string    `yaml:"queue" json:"queue"`
 	Topology     *Topology `yaml:"topology" json:"topology,omitempty"`
 	Allocated    Resource  `yaml:"-" json:"allocated"`
 }

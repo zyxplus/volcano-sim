@@ -67,3 +67,37 @@ func TestLoadRejectsRequiredTopologyWithoutGPUModel(t *testing.T) {
 		t.Fatal("Load accepted Required topology without gpuModel")
 	}
 }
+
+func TestLoadQueues(t *testing.T) {
+	dir := t.TempDir()
+	queuesPath := filepath.Join(dir, "queues.yaml")
+	if err := os.WriteFile(queuesPath, []byte("queues:\n  - name: inference\n    weight: 3\n    capability: {gpu: 4}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	queues, err := LoadQueues(queuesPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queues[0].Name != "inference" || queues[0].Weight != 3 {
+		t.Fatalf("unexpected queue: %#v", queues[0])
+	}
+}
+
+func TestLoadAssignsDefaultQueueToJobWithoutQueue(t *testing.T) {
+	dir := t.TempDir()
+	nodesPath := filepath.Join(dir, "nodes.yaml")
+	jobsPath := filepath.Join(dir, "jobs.yaml")
+	if err := os.WriteFile(nodesPath, []byte("nodes:\n  - name: n1\n    capacity: {gpu: 1}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(jobsPath, []byte("jobs:\n  - name: job\n    minAvailable: 1\n    replicas: 1\n    request: {gpu: 1}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, jobs, err := Load(nodesPath, jobsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if jobs[0].Queue != "default" {
+		t.Fatalf("queue = %q, want default", jobs[0].Queue)
+	}
+}

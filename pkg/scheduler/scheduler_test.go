@@ -125,3 +125,35 @@ func TestRunAllowsRequiredGangWhenFabricFitsMinAvailable(t *testing.T) {
 		t.Fatalf("allocation count = %d, want 4", len(plan.Allocations))
 	}
 }
+
+func TestRunSchedulesHigherWeightQueueFirst(t *testing.T) {
+	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 1})}}
+	queues := []api.Queue{
+		{Name: "low", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1})},
+		{Name: "high", Weight: 2, Capability: api.NewResource(map[string]float64{"gpu": 1})},
+	}
+	jobs := []api.Job{
+		{Name: "low-job", Queue: "low", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1})},
+		{Name: "high-job", Queue: "high", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1})},
+	}
+	plan := New(nodes).RunWithQueues(jobs, queues)
+	if len(plan.Allocations) != 1 || plan.Allocations[0].JobName != "high-job" {
+		t.Fatalf("unexpected plan: %#v", plan)
+	}
+}
+
+func TestRunWithQueuesRejectsGangExceedingCapability(t *testing.T) {
+	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 8})}}
+	queues := []api.Queue{{Name: "limited", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 4})}}
+	jobs := []api.Job{{Name: "large", Queue: "limited", Replicas: 8, MinAvailable: 8, Request: api.NewResource(map[string]float64{"gpu": 1})}}
+	plan := New(nodes).RunWithQueues(jobs, queues)
+	if len(plan.Allocations) != 0 || plan.Unschedulable["large"] != "queue capability exceeded" { t.Fatalf("unexpected plan: %#v", plan) }
+}
+
+func TestRunWithQueuesStopsAtCapabilityAfterGangIsReady(t *testing.T) {
+	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 8})}}
+	queues := []api.Queue{{Name: "limited", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 4})}}
+	jobs := []api.Job{{Name: "elastic", Queue: "limited", Replicas: 8, MinAvailable: 4, Request: api.NewResource(map[string]float64{"gpu": 1})}}
+	plan := New(nodes).RunWithQueues(jobs, queues)
+	if len(plan.Allocations) != 4 { t.Fatalf("allocation count = %d, want 4", len(plan.Allocations)) }
+}

@@ -17,6 +17,29 @@ type jobsDocument struct {
 	Jobs []api.Job `yaml:"jobs"`
 }
 
+type queuesDocument struct {
+	Queues []api.Queue `yaml:"queues"`
+}
+
+// LoadQueues reads queues and initializes their in-memory allocation vectors.
+func LoadQueues(path string) ([]api.Queue, error) {
+	var document queuesDocument
+	if err := decode(path, &document); err != nil {
+		return nil, fmt.Errorf("load queues: %w", err)
+	}
+	for index := range document.Queues {
+		queue := &document.Queues[index]
+		if queue.Name == "" || queue.Weight <= 0 {
+			return nil, fmt.Errorf("queue has invalid name or weight")
+		}
+		if err := validateResource(queue.Name, "queue", queue.Capability); err != nil {
+			return nil, err
+		}
+		queue.Allocated = api.NewResource(nil)
+	}
+	return document.Queues, nil
+}
+
 // Load reads two scenario files and returns nodes with initialized idle capacity.
 func Load(nodesPath, jobsPath string) ([]api.Node, []api.Job, error) {
 	var nodeDocument nodesDocument
@@ -37,6 +60,9 @@ func Load(nodesPath, jobsPath string) ([]api.Node, []api.Job, error) {
 	}
 	for index := range jobDocument.Jobs {
 		job := &jobDocument.Jobs[index]
+		if job.Queue == "" {
+			job.Queue = "default"
+		}
 		if job.Name == "" {
 			return nil, nil, fmt.Errorf("job has an empty name")
 		}

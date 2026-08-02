@@ -29,6 +29,26 @@ func TestRunPrintsAllocationPlanAsJSON(t *testing.T) {
 	}
 }
 
+func TestRunAcceptsQueuesFile(t *testing.T) {
+	dir := t.TempDir()
+	nodesPath := filepath.Join(dir, "nodes.yaml")
+	jobsPath := filepath.Join(dir, "jobs.yaml")
+	queuesPath := filepath.Join(dir, "queues.yaml")
+	if err := os.WriteFile(nodesPath, []byte("nodes:\n  - name: n1\n    capacity: {gpu: 1}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(jobsPath, []byte("jobs:\n  - name: job\n    queue: high\n    minAvailable: 1\n    replicas: 1\n    request: {gpu: 1}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(queuesPath, []byte("queues:\n  - name: high\n    weight: 2\n    capability: {gpu: 1}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	if err := run([]string{"-nodes", nodesPath, "-jobs", jobsPath, "-queues", queuesPath}, &output); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestExecutableAcceptsNodeAndJobFlags(t *testing.T) {
 	dir := t.TempDir()
 	nodesPath := filepath.Join(dir, "nodes.yaml")

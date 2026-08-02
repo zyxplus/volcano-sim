@@ -51,15 +51,50 @@ type trialAllocation struct {
 // Run schedules each job as one gang transaction. It commits all successful
 // trial allocations only when the transaction reaches MinAvailable.
 func (s *Scheduler) Run(jobs []api.Job) api.AllocationPlan {
+	return s.runOrdered(s.OrderJobs(jobs), nil)
+}
+
+// RunWithQueues orders queues by weight, then preserves DRF ordering within each queue.
+func (s *Scheduler) RunWithQueues(jobs []api.Job, queues []api.Queue) api.AllocationPlan {
+	byQueue := make(map[string][]api.Job)
+	for _, job := range jobs {
+		byQueue[job.Queue] = append(byQueue[job.Queue], job)
+	}
+	sort.SliceStable(queues, func(i, j int) bool {
+		if queues[i].Weight == queues[j].Weight {
+			return queues[i].Name < queues[j].Name
+		}
+		return queues[i].Weight > queues[j].Weight
+	})
+	plan := api.AllocationPlan{Unschedulable: map[string]string{}}
+	for i := range queues {
+		for _, job := range s.OrderJobs(byQueue[queues[i].Name]) {
+			partial := s.runOrdered([]api.Job{job}, &queues[i])
+			plan.Allocations = append(plan.Allocations, partial.Allocations...)
+			for name, reason := range partial.Unschedulable {
+				plan.Unschedulable[name] = reason
+			}
+		}
+	}
+	return plan
+}
+
+func (s *Scheduler) runOrdered(jobs []api.Job, queue *api.Queue) api.AllocationPlan {
 	plan := api.AllocationPlan{Unschedulable: make(map[string]string)}
-	for _, job := range s.OrderJobs(jobs) {
+	for _, job := range jobs {
 		candidates, reason := s.selectCandidateNodes(job)
 		if reason != "" {
 			plan.Unschedulable[job.Name] = reason
 			continue
 		}
 		journal := make([]trialAllocation, 0, job.Replicas)
+		journalResource := api.NewResource(nil)
+		capabilityBlocked := false
 		for taskIndex := 0; taskIndex < job.Replicas; taskIndex++ {
+			if queue != nil && !queue.Allocated.Add(journalResource).Add(job.Request).Fits(queue.Capability) {
+				capabilityBlocked = true
+				break
+			}
 			nodeIndex := s.findNode(job.Request, candidates)
 			if nodeIndex < 0 {
 				break
@@ -70,6 +105,7 @@ func (s *Scheduler) Run(jobs []api.Job) api.AllocationPlan {
 				nodeIndex:  nodeIndex,
 				request:    job.Request,
 			})
+			journalResource = journalResource.Add(job.Request)
 		}
 
 		if len(journal) < job.MinAvailable {
@@ -77,11 +113,18 @@ func (s *Scheduler) Run(jobs []api.Job) api.AllocationPlan {
 				trial := journal[index]
 				s.nodes[trial.nodeIndex].Idle = s.nodes[trial.nodeIndex].Idle.Add(trial.request)
 			}
-			plan.Unschedulable[job.Name] = "insufficient resources for minAvailable"
+			if capabilityBlocked {
+				plan.Unschedulable[job.Name] = "queue capability exceeded"
+			} else {
+				plan.Unschedulable[job.Name] = "insufficient resources for minAvailable"
+			}
 			continue
 		}
 		for _, trial := range journal {
 			plan.Allocations = append(plan.Allocations, trial.allocation)
+		}
+		if queue != nil {
+			queue.Allocated = queue.Allocated.Add(journalResource)
 		}
 	}
 	return plan

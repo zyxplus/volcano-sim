@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/zhouyingxiao/volcano-sim/pkg/api"
 	"github.com/zhouyingxiao/volcano-sim/pkg/loader"
 	"github.com/zhouyingxiao/volcano-sim/pkg/scheduler"
 )
@@ -23,6 +24,7 @@ func run(args []string, output io.Writer) error {
 	flags.SetOutput(io.Discard)
 	nodesPath := flags.String("nodes", "", "path to nodes YAML")
 	jobsPath := flags.String("jobs", "", "path to jobs YAML")
+	queuesPath := flags.String("queues", "", "path to queues YAML")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -34,6 +36,18 @@ func run(args []string, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	plan := scheduler.New(nodes).Run(jobs)
+	queues := []api.Queue{{
+		Name:       "default",
+		Weight:     1,
+		Capability: api.ClusterTotal(nodes),
+		Allocated:  api.NewResource(nil),
+	}}
+	if *queuesPath != "" {
+		queues, err = loader.LoadQueues(*queuesPath)
+		if err != nil {
+			return err
+		}
+	}
+	plan := scheduler.New(nodes).RunWithQueues(jobs, queues)
 	return json.NewEncoder(output).Encode(plan)
 }
