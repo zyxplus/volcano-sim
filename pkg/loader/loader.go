@@ -46,10 +46,26 @@ func Load(nodesPath, jobsPath string) ([]api.Node, []api.Job, error) {
 		if err := validateResource(job.Name, "job", job.Request); err != nil {
 			return nil, nil, err
 		}
+		if err := validateTopology(job); err != nil {
+			return nil, nil, err
+		}
 		job.Allocated = api.NewResource(nil)
 	}
 
 	return nodeDocument.Nodes, jobDocument.Jobs, nil
+}
+
+func validateTopology(job *api.Job) error {
+	if job.Topology == nil || job.Topology.SameFabric == "" {
+		return nil
+	}
+	if job.Topology.SameFabric != "Required" {
+		return fmt.Errorf("job %q has unsupported sameFabric value %q", job.Name, job.Topology.SameFabric)
+	}
+	if job.Topology.GPUModel == "" {
+		return fmt.Errorf("job %q requires gpuModel when sameFabric is Required", job.Name)
+	}
+	return nil
 }
 
 func decode(path string, target any) error {

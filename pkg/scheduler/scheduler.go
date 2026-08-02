@@ -53,9 +53,14 @@ type trialAllocation struct {
 func (s *Scheduler) Run(jobs []api.Job) api.AllocationPlan {
 	plan := api.AllocationPlan{Unschedulable: make(map[string]string)}
 	for _, job := range s.OrderJobs(jobs) {
+		candidates, reason := s.selectCandidateNodes(job)
+		if reason != "" {
+			plan.Unschedulable[job.Name] = reason
+			continue
+		}
 		journal := make([]trialAllocation, 0, job.Replicas)
 		for taskIndex := 0; taskIndex < job.Replicas; taskIndex++ {
-			nodeIndex := s.findNode(job.Request)
+			nodeIndex := s.findNode(job.Request, candidates)
 			if nodeIndex < 0 {
 				break
 			}
@@ -82,8 +87,50 @@ func (s *Scheduler) Run(jobs []api.Job) api.AllocationPlan {
 	return plan
 }
 
-func (s *Scheduler) findNode(request api.Resource) int {
+// selectCandidateNodes chooses one complete matching Fabric before any Gang
+// transaction changes node idle resources.
+func (s *Scheduler) selectCandidateNodes(job api.Job) ([]int, string) {
+	if job.Topology == nil || job.Topology.SameFabric == "" {
+		candidates := make([]int, len(s.nodes))
+		for index := range s.nodes {
+			candidates[index] = index
+		}
+		return candidates, ""
+	}
+
+	need := api.NewResource(nil)
+	for replica := 0; replica < job.Replicas; replica++ {
+		need = need.Add(job.Request)
+	}
+	fabrics := make(map[string][]int)
 	for index, node := range s.nodes {
+		if node.Labels["gpu-model"] != job.Topology.GPUModel || node.Labels["fabric-id"] == "" {
+			continue
+		}
+		fabricID := node.Labels["fabric-id"]
+		fabrics[fabricID] = append(fabrics[fabricID], index)
+	}
+
+	fabricIDs := make([]string, 0, len(fabrics))
+	for fabricID := range fabrics {
+		fabricIDs = append(fabricIDs, fabricID)
+	}
+	sort.Strings(fabricIDs)
+	for _, fabricID := range fabricIDs {
+		idle := api.NewResource(nil)
+		for _, index := range fabrics[fabricID] {
+			idle = idle.Add(s.nodes[index].Idle)
+		}
+		if need.Fits(idle) {
+			return fabrics[fabricID], ""
+		}
+	}
+	return nil, "no single fabric has enough capacity"
+}
+
+func (s *Scheduler) findNode(request api.Resource, candidates []int) int {
+	for _, index := range candidates {
+		node := s.nodes[index]
 		if request.Fits(node.Idle) {
 			return index
 		}

@@ -43,3 +43,65 @@ func TestRunRollsBackJobWhenGangCannotReachMinimum(t *testing.T) {
 		t.Fatalf("missing unschedulable reason: %#v", plan.Unschedulable)
 	}
 }
+
+func TestRunRejectsRequiredGangSplitAcrossFabrics(t *testing.T) {
+	nodes := []api.Node{
+		{
+			Name:     "fabric-a-node",
+			Capacity: api.NewResource(map[string]float64{"gpu": 16}),
+			Labels:   map[string]string{"fabric-id": "fabric-a", "gpu-model": "c550"},
+		},
+		{
+			Name:     "fabric-b-node",
+			Capacity: api.NewResource(map[string]float64{"gpu": 16}),
+			Labels:   map[string]string{"fabric-id": "fabric-b", "gpu-model": "c550"},
+		},
+	}
+	job := api.Job{
+		Name:         "large",
+		MinAvailable: 24,
+		Replicas:     24,
+		Request:      api.NewResource(map[string]float64{"gpu": 1}),
+		Topology:     &api.Topology{GPUModel: "c550", SameFabric: "Required"},
+	}
+
+	plan := New(nodes).Run([]api.Job{job})
+	if len(plan.Allocations) != 0 {
+		t.Fatalf("split Fabric allocation leaked: %#v", plan.Allocations)
+	}
+	if plan.Unschedulable["large"] != "no single fabric has enough capacity" {
+		t.Fatalf("unexpected unschedulable reason: %#v", plan.Unschedulable)
+	}
+}
+
+func TestRunPlacesRequiredGangInOneFeasibleFabric(t *testing.T) {
+	nodes := []api.Node{
+		{
+			Name:     "fabric-a-node",
+			Capacity: api.NewResource(map[string]float64{"gpu": 4}),
+			Labels:   map[string]string{"fabric-id": "fabric-a", "gpu-model": "c550"},
+		},
+		{
+			Name:     "fabric-b-node",
+			Capacity: api.NewResource(map[string]float64{"gpu": 4}),
+			Labels:   map[string]string{"fabric-id": "fabric-b", "gpu-model": "c550"},
+		},
+	}
+	job := api.Job{
+		Name:         "small",
+		MinAvailable: 2,
+		Replicas:     2,
+		Request:      api.NewResource(map[string]float64{"gpu": 1}),
+		Topology:     &api.Topology{GPUModel: "c550", SameFabric: "Required"},
+	}
+
+	plan := New(nodes).Run([]api.Job{job})
+	if len(plan.Allocations) != 2 {
+		t.Fatalf("allocation count = %d, want 2", len(plan.Allocations))
+	}
+	for _, allocation := range plan.Allocations {
+		if allocation.NodeName != "fabric-a-node" {
+			t.Fatalf("allocation used %q, want fabric-a-node", allocation.NodeName)
+		}
+	}
+}

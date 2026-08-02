@@ -3,18 +3,26 @@ package api
 // Node is a schedulable machine. Idle changes during a scheduling session;
 // Capacity remains the machine's total resource vector.
 type Node struct {
-	Name     string   `yaml:"name" json:"name"`
-	Capacity Resource `yaml:"capacity" json:"capacity"`
-	Idle     Resource `yaml:"-" json:"idle"`
+	Name     string            `yaml:"name" json:"name"`
+	Capacity Resource          `yaml:"capacity" json:"capacity"`
+	Labels   map[string]string `yaml:"labels" json:"labels"`
+	Idle     Resource          `yaml:"-" json:"idle"`
+}
+
+// Topology constrains where a Job's task replicas may be placed.
+type Topology struct {
+	GPUModel   string `yaml:"gpuModel" json:"gpuModel"`
+	SameFabric string `yaml:"sameFabric" json:"sameFabric"`
 }
 
 // Job describes identical task replicas that must reach MinAvailable together.
 type Job struct {
-	Name         string   `yaml:"name" json:"name"`
-	MinAvailable int      `yaml:"minAvailable" json:"minAvailable"`
-	Replicas     int      `yaml:"replicas" json:"replicas"`
-	Request      Resource `yaml:"request" json:"request"`
-	Allocated    Resource `yaml:"-" json:"allocated"`
+	Name         string    `yaml:"name" json:"name"`
+	MinAvailable int       `yaml:"minAvailable" json:"minAvailable"`
+	Replicas     int       `yaml:"replicas" json:"replicas"`
+	Request      Resource  `yaml:"request" json:"request"`
+	Topology     *Topology `yaml:"topology" json:"topology,omitempty"`
+	Allocated    Resource  `yaml:"-" json:"allocated"`
 }
 
 // Task identifies one replica of a Job during trial allocation.
