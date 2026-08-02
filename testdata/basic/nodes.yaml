@@ -1,0 +1,5 @@
+nodes:
+  - name: gpu-node-1
+    capacity:
+      cpu: 64
+      gpu: 4

@@ -1,0 +1,7 @@
+jobs:
+  - name: train
+    minAvailable: 2
+    replicas: 2
+    request:
+      cpu: 8
+      gpu: 2
