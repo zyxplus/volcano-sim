@@ -99,7 +99,7 @@ func (s *Scheduler) selectCandidateNodes(job api.Job) ([]int, string) {
 	}
 
 	need := api.NewResource(nil)
-	for replica := 0; replica < job.Replicas; replica++ {
+	for replica := 0; replica < job.MinAvailable; replica++ {
 		need = need.Add(job.Request)
 	}
 	fabrics := make(map[string][]int)

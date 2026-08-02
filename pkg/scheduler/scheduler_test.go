@@ -105,3 +105,23 @@ func TestRunPlacesRequiredGangInOneFeasibleFabric(t *testing.T) {
 		}
 	}
 }
+
+func TestRunAllowsRequiredGangWhenFabricFitsMinAvailable(t *testing.T) {
+	nodes := []api.Node{{
+		Name:     "fabric-a-node",
+		Capacity: api.NewResource(map[string]float64{"gpu": 4}),
+		Labels:   map[string]string{"fabric-id": "fabric-a", "gpu-model": "c550"},
+	}}
+	job := api.Job{
+		Name:         "elastic",
+		Replicas:     8,
+		MinAvailable: 4,
+		Request:      api.NewResource(map[string]float64{"gpu": 1}),
+		Topology:     &api.Topology{GPUModel: "c550", SameFabric: "Required"},
+	}
+
+	plan := New(nodes).Run([]api.Job{job})
+	if len(plan.Allocations) != 4 {
+		t.Fatalf("allocation count = %d, want 4", len(plan.Allocations))
+	}
+}
