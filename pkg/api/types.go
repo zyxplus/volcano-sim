@@ -17,10 +17,12 @@ type Topology struct {
 
 // Queue groups jobs under a weighted, resource-capped admission boundary.
 type Queue struct {
-	Name       string   `yaml:"name" json:"name"`
-	Weight     int      `yaml:"weight" json:"weight"`
-	Capability Resource `yaml:"capability" json:"capability"`
-	Allocated  Resource `yaml:"-" json:"allocated"`
+	Name        string   `yaml:"name" json:"name"`
+	Weight      int      `yaml:"weight" json:"weight"`
+	Capability  Resource `yaml:"capability" json:"capability"`
+	Guarantee   Resource `yaml:"guarantee" json:"guarantee"`
+	Reclaimable bool     `yaml:"reclaimable" json:"reclaimable"`
+	Allocated   Resource `yaml:"-" json:"allocated"`
 }
 
 // Job describes identical task replicas that must reach MinAvailable together.
