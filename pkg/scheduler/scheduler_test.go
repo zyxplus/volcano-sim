@@ -249,3 +249,19 @@ func TestRunWithQueuesStopsAtCapabilityAfterGangIsReady(t *testing.T) {
 		t.Fatalf("allocation count = %d, want 4", len(plan.Allocations))
 	}
 }
+
+func TestRunWithQueuesReordersIncompleteJobsBetweenBatches(t *testing.T) {
+	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 4})}}
+	queues := []api.Queue{{Name: "q", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 4})}}
+	a := &api.Job{Name: "a", Queue: "q", Replicas: 4, MinAvailable: 1, BatchSize: 1, Request: api.NewResource(map[string]float64{"gpu": 1}), Allocated: api.NewResource(nil)}
+	b := &api.Job{Name: "b", Queue: "q", Replicas: 4, MinAvailable: 1, BatchSize: 1, Request: api.NewResource(map[string]float64{"gpu": 1}), Allocated: api.NewResource(nil)}
+	plan := New(nodes).RunWithQueues([]*api.Job{a, b}, queues)
+	if len(plan.Allocations) != 4 {
+		t.Fatalf("allocation count = %d, want 4", len(plan.Allocations))
+	}
+	for index, want := range []string{"a", "b", "a", "b"} {
+		if plan.Allocations[index].JobName != want {
+			t.Fatalf("allocation %d = %q, want %q", index, plan.Allocations[index].JobName, want)
+		}
+	}
+}

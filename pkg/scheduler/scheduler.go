@@ -69,11 +69,21 @@ func (s *Scheduler) RunWithQueues(jobs []*api.Job, queues []api.Queue) api.Alloc
 	})
 	plan := api.AllocationPlan{Unschedulable: map[string]string{}}
 	for i := range queues {
-		for _, job := range s.OrderJobs(byQueue[queues[i].Name]) {
+		pending := append([]*api.Job(nil), byQueue[queues[i].Name]...)
+		for len(pending) > 0 {
+			job := s.OrderJobs(pending)[0]
 			partial := s.runOrdered([]*api.Job{job}, &queues[i])
 			plan.Allocations = append(plan.Allocations, partial.Allocations...)
 			for name, reason := range partial.Unschedulable {
 				plan.Unschedulable[name] = reason
+			}
+			if len(partial.Allocations) == 0 || job.ScheduledReplicas >= job.Replicas {
+				for index, candidate := range pending {
+					if candidate == job {
+						pending = append(pending[:index], pending[index+1:]...)
+						break
+					}
+				}
 			}
 		}
 	}
@@ -164,7 +174,18 @@ func (s *Scheduler) runOrdered(jobs []*api.Job, queue *api.Queue) api.Allocation
 		journal := make([]trialAllocation, 0, job.Replicas)
 		journalResource := api.NewResource(nil)
 		capabilityBlocked := false
-		for taskIndex := 0; taskIndex < job.Replicas; taskIndex++ {
+		batchLimit := job.BatchSize
+		if batchLimit == 0 {
+			batchLimit = job.Replicas
+		}
+		if job.ScheduledReplicas == 0 && batchLimit < job.MinAvailable {
+			batchLimit = job.MinAvailable
+		}
+		remaining := job.Replicas - job.ScheduledReplicas
+		if batchLimit > remaining {
+			batchLimit = remaining
+		}
+		for taskIndex := 0; taskIndex < batchLimit; taskIndex++ {
 			if queue != nil && !queue.Allocated.Add(journalResource).Add(job.Request).Fits(queue.Capability) {
 				capabilityBlocked = true
 				break
@@ -182,7 +203,7 @@ func (s *Scheduler) runOrdered(jobs []*api.Job, queue *api.Queue) api.Allocation
 			journalResource = journalResource.Add(job.Request)
 		}
 
-		if len(journal) < job.MinAvailable {
+		if job.ScheduledReplicas+len(journal) < job.MinAvailable {
 			for index := len(journal) - 1; index >= 0; index-- {
 				trial := journal[index]
 				s.nodes[trial.nodeIndex].Idle = s.nodes[trial.nodeIndex].Idle.Add(trial.request)
