@@ -90,13 +90,64 @@ func (s *Scheduler) RunWithQueues(jobs []*api.Job, queues []api.Queue) api.Alloc
 	return plan
 }
 
-// RunSession prefers normal batch allocation and reclaims only after no job progresses.
+// RunSession keeps scheduling incomplete jobs until neither normal placement
+// nor reclaim can make progress in the current session.
 func (s *Scheduler) RunSession(jobs []*api.Job, queues []api.Queue, victims []api.RunningTask) api.AllocationPlan {
-	plan := s.RunWithQueues(jobs, queues)
-	if len(plan.Allocations) > 0 {
-		return plan
+	plan := api.AllocationPlan{Unschedulable: make(map[string]string)}
+	remainingVictims := append([]api.RunningTask(nil), victims...)
+	for {
+		pending := make([]*api.Job, 0, len(jobs))
+		for _, job := range jobs {
+			if job.ScheduledReplicas < job.Replicas {
+				pending = append(pending, job)
+			}
+		}
+		if len(pending) == 0 {
+			break
+		}
+
+		normal := s.RunWithQueues(pending, queues)
+		mergePlans(&plan, normal)
+		if len(normal.Allocations) > 0 {
+			continue
+		}
+
+		reclaimed := s.RunWithReclaim(pending, queues, remainingVictims)
+		mergePlans(&plan, reclaimed)
+		if len(reclaimed.Allocations) == 0 {
+			break
+		}
+		remainingVictims = removeEvictedVictims(remainingVictims, reclaimed.Evictions)
 	}
-	return s.RunWithReclaim(jobs, queues, victims)
+	return plan
+}
+
+func mergePlans(dst *api.AllocationPlan, src api.AllocationPlan) {
+	dst.Allocations = append(dst.Allocations, src.Allocations...)
+	dst.Evictions = append(dst.Evictions, src.Evictions...)
+	for name, reason := range src.Unschedulable {
+		dst.Unschedulable[name] = reason
+	}
+}
+
+func removeEvictedVictims(victims []api.RunningTask, evictions []api.Eviction) []api.RunningTask {
+	if len(evictions) == 0 {
+		return victims
+	}
+	remaining := make([]api.RunningTask, 0, len(victims))
+	for _, victim := range victims {
+		removed := false
+		for _, eviction := range evictions {
+			if victim.JobName == eviction.JobName && victim.TaskIndex == eviction.TaskIndex && victim.NodeName == eviction.NodeName {
+				removed = true
+				break
+			}
+		}
+		if !removed {
+			remaining = append(remaining, victim)
+		}
+	}
+	return remaining
 }
 
 // RunWithReclaim dry-runs victim evictions before attempting waiting gangs.
@@ -205,7 +256,7 @@ func (s *Scheduler) runOrdered(jobs []*api.Job, queue *api.Queue) api.Allocation
 			}
 			s.nodes[nodeIndex].Idle = s.nodes[nodeIndex].Idle.Sub(job.Request)
 			journal = append(journal, trialAllocation{
-				allocation: api.Allocation{JobName: job.Name, TaskIndex: taskIndex, NodeName: s.nodes[nodeIndex].Name},
+				allocation: api.Allocation{JobName: job.Name, TaskIndex: job.ScheduledReplicas + taskIndex, NodeName: s.nodes[nodeIndex].Name},
 				nodeIndex:  nodeIndex,
 				request:    job.Request,
 			})

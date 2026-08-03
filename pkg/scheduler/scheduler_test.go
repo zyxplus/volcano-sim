@@ -250,6 +250,19 @@ func TestRunWithQueuesStopsAtCapabilityAfterGangIsReady(t *testing.T) {
 	}
 }
 
+func TestRunWithQueuesUsesContinuousTaskIndexesAcrossBatches(t *testing.T) {
+	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 2})}}
+	queues := []api.Queue{{Name: "q", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 2})}}
+	job := &api.Job{Name: "batched", Queue: "q", Replicas: 2, MinAvailable: 1, BatchSize: 1, Request: api.NewResource(map[string]float64{"gpu": 1})}
+	plan := New(nodes).RunWithQueues([]*api.Job{job}, queues)
+	if len(plan.Allocations) != 2 {
+		t.Fatalf("allocation count = %d, want 2", len(plan.Allocations))
+	}
+	if plan.Allocations[0].TaskIndex != 0 || plan.Allocations[1].TaskIndex != 1 {
+		t.Fatalf("task indexes = %#v, want [0 1]", plan.Allocations)
+	}
+}
+
 func TestRunWithQueuesReordersIncompleteJobsBetweenBatches(t *testing.T) {
 	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 4})}}
 	queues := []api.Queue{{Name: "q", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 4})}}
@@ -284,5 +297,26 @@ func TestRunSessionReclaimsWhenNormalBatchCannotProgress(t *testing.T) {
 	plan := New(nodes).RunSession([]*api.Job{job}, queues, victims)
 	if len(plan.Evictions) != 1 || len(plan.Allocations) != 1 {
 		t.Fatalf("unexpected plan: %#v", plan)
+	}
+}
+
+func TestRunSessionContinuesAfterNormalProgressToReclaimAnotherJob(t *testing.T) {
+	nodes := []api.Node{
+		{Name: "a", Capacity: api.NewResource(map[string]float64{"gpu": 1}), Labels: map[string]string{"fabric-id": "fa", "gpu-model": "m"}},
+		{Name: "b", Capacity: api.NewResource(map[string]float64{"gpu": 1}), Idle: api.NewResource(map[string]float64{}), Labels: map[string]string{"fabric-id": "fb", "gpu-model": "m"}},
+	}
+	queues := []api.Queue{
+		{Name: "first", Weight: 2, Capability: api.NewResource(map[string]float64{"gpu": 1})},
+		{Name: "waiting", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1}), Guarantee: api.NewResource(map[string]float64{"gpu": 1})},
+		{Name: "training", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1}), Reclaimable: true, Allocated: api.NewResource(map[string]float64{"gpu": 1})},
+	}
+	jobs := []*api.Job{
+		{Name: "first-job", Priority: 100, Queue: "first", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1})},
+		{Name: "waiting-job", Priority: 200, Queue: "waiting", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1}), Topology: &api.Topology{GPUModel: "m", SameFabric: "Required"}},
+	}
+	victims := []api.RunningTask{{JobName: "old", Priority: 10, QueueName: "training", TaskIndex: 0, NodeName: "b", Request: api.NewResource(map[string]float64{"gpu": 1})}}
+	plan := New(nodes).RunSession(jobs, queues, victims)
+	if len(plan.Allocations) != 2 || len(plan.Evictions) != 1 {
+		t.Fatalf("unexpected session plan: %#v", plan)
 	}
 }
