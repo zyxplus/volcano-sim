@@ -147,7 +147,32 @@ func TestRunWithQueuesRejectsGangExceedingCapability(t *testing.T) {
 	queues := []api.Queue{{Name: "limited", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 4})}}
 	jobs := []api.Job{{Name: "large", Queue: "limited", Replicas: 8, MinAvailable: 8, Request: api.NewResource(map[string]float64{"gpu": 1})}}
 	plan := New(nodes).RunWithQueues(jobs, queues)
-	if len(plan.Allocations) != 0 || plan.Unschedulable["large"] != "queue capability exceeded" { t.Fatalf("unexpected plan: %#v", plan) }
+	if len(plan.Allocations) != 0 || plan.Unschedulable["large"] != "queue capability exceeded" {
+		t.Fatalf("unexpected plan: %#v", plan)
+	}
+}
+
+func TestReclaimEvictsOverusedReclaimableTaskForWaitingGang(t *testing.T) {
+	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 1}), Idle: api.NewResource(map[string]float64{})}}
+	queues := []api.Queue{
+		{Name: "training", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1}), Guarantee: api.NewResource(map[string]float64{}), Reclaimable: true, Allocated: api.NewResource(map[string]float64{"gpu": 1})},
+		{Name: "inference", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1}), Guarantee: api.NewResource(map[string]float64{"gpu": 1})},
+	}
+	victims := []api.RunningTask{{JobName: "old", QueueName: "training", TaskIndex: 0, NodeName: "n1", Request: api.NewResource(map[string]float64{"gpu": 1})}}
+	jobs := []api.Job{{Name: "new", Queue: "inference", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1})}}
+	plan := New(nodes).RunWithReclaim(jobs, queues, victims)
+	if len(plan.Evictions) != 1 || len(plan.Allocations) != 1 {
+		t.Fatalf("unexpected plan: %#v", plan)
+	}
+}
+
+func TestReclaimRollsBackEvictionWhenGangIsStillNotReady(t *testing.T) {
+	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 1}), Idle: api.NewResource(map[string]float64{})}}
+	queues := []api.Queue{{Name: "training", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1}), Reclaimable: true, Allocated: api.NewResource(map[string]float64{"gpu": 1})}, {Name: "inference", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 2}), Guarantee: api.NewResource(map[string]float64{"gpu": 2})}}
+	victims := []api.RunningTask{{JobName: "old", QueueName: "training", TaskIndex: 0, NodeName: "n1", Request: api.NewResource(map[string]float64{"gpu": 1})}}
+	jobs := []api.Job{{Name: "new", Queue: "inference", Replicas: 2, MinAvailable: 2, Request: api.NewResource(map[string]float64{"gpu": 1})}}
+	plan := New(nodes).RunWithReclaim(jobs, queues, victims)
+	if len(plan.Evictions) != 0 || len(plan.Allocations) != 0 { t.Fatalf("reclaim leaked into failed plan: %#v", plan) }
 }
 
 func TestRunWithQueuesStopsAtCapabilityAfterGangIsReady(t *testing.T) {
@@ -155,5 +180,7 @@ func TestRunWithQueuesStopsAtCapabilityAfterGangIsReady(t *testing.T) {
 	queues := []api.Queue{{Name: "limited", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 4})}}
 	jobs := []api.Job{{Name: "elastic", Queue: "limited", Replicas: 8, MinAvailable: 4, Request: api.NewResource(map[string]float64{"gpu": 1})}}
 	plan := New(nodes).RunWithQueues(jobs, queues)
-	if len(plan.Allocations) != 4 { t.Fatalf("allocation count = %d, want 4", len(plan.Allocations)) }
+	if len(plan.Allocations) != 4 {
+		t.Fatalf("allocation count = %d, want 4", len(plan.Allocations))
+	}
 }

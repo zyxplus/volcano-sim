@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/zhouyingxiao/volcano-sim/pkg/api"
+	"github.com/zhouyingxiao/volcano-sim/pkg/proportion"
 )
 
 // Scheduler owns mutable node-idle state for one in-memory scheduling session.
@@ -77,6 +78,50 @@ func (s *Scheduler) RunWithQueues(jobs []api.Job, queues []api.Queue) api.Alloca
 		}
 	}
 	return plan
+}
+
+// RunWithReclaim dry-runs victim evictions before attempting waiting gangs.
+// Evictions are retained only when the subsequent allocation succeeds.
+func (s *Scheduler) RunWithReclaim(jobs []api.Job, queues []api.Queue, victims []api.RunningTask) api.AllocationPlan {
+	deserved := proportion.ComputeDeserved(queues, s.total)
+	queueIndex := make(map[string]int, len(queues))
+	for index := range queues {
+		queueIndex[queues[index].Name] = index
+	}
+
+	plan := api.AllocationPlan{Unschedulable: make(map[string]string)}
+	for _, victim := range victims {
+		index, ok := queueIndex[victim.QueueName]
+		if !ok || !queues[index].Reclaimable || !proportion.IsOverused(queues[index], deserved[victim.QueueName]) {
+			continue
+		}
+		for nodeIndex := range s.nodes {
+			if s.nodes[nodeIndex].Name == victim.NodeName {
+				s.nodes[nodeIndex].Idle = s.nodes[nodeIndex].Idle.Add(victim.Request)
+				queues[index].Allocated = queues[index].Allocated.Sub(victim.Request)
+				plan.Evictions = append(plan.Evictions, api.Eviction{JobName: victim.JobName, TaskIndex: victim.TaskIndex, NodeName: victim.NodeName, Reason: "reclaim"})
+				break
+			}
+		}
+	}
+
+	allocated := s.RunWithQueues(jobs, queues)
+	if len(allocated.Allocations) == 0 {
+		for _, eviction := range plan.Evictions {
+			for _, victim := range victims {
+				if victim.JobName == eviction.JobName && victim.TaskIndex == eviction.TaskIndex {
+					for nodeIndex := range s.nodes {
+						if s.nodes[nodeIndex].Name == victim.NodeName {
+							s.nodes[nodeIndex].Idle = s.nodes[nodeIndex].Idle.Sub(victim.Request)
+						}
+					}
+				}
+			}
+		}
+		return allocated
+	}
+	allocated.Evictions = plan.Evictions
+	return allocated
 }
 
 func (s *Scheduler) runOrdered(jobs []api.Job, queue *api.Queue) api.AllocationPlan {

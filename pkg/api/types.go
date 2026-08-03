@@ -43,6 +43,15 @@ type Task struct {
 	Request Resource `json:"request"`
 }
 
+// RunningTask is an already placed task that may be selected as a reclaim victim.
+type RunningTask struct {
+	JobName   string
+	QueueName string
+	TaskIndex int
+	NodeName  string
+	Request   Resource
+}
+
 // Allocation records a committed placement decision.
 type Allocation struct {
 	JobName   string `json:"jobName"`
@@ -50,9 +59,18 @@ type Allocation struct {
 	NodeName  string `json:"nodeName"`
 }
 
+// Eviction records a dry-run decision to release a running task's resources.
+type Eviction struct {
+	JobName   string `json:"jobName"`
+	TaskIndex int    `json:"taskIndex"`
+	NodeName  string `json:"nodeName"`
+	Reason    string `json:"reason"`
+}
+
 // AllocationPlan is the scheduler's side-effect-free output.
 type AllocationPlan struct {
 	Allocations   []Allocation      `json:"allocations"`
+	Evictions     []Eviction        `json:"evictions"`
 	Unschedulable map[string]string `json:"unschedulable"`
 }
 
