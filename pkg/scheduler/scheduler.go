@@ -93,7 +93,12 @@ func (s *Scheduler) RunWithQueues(jobs []*api.Job, queues []api.Queue) api.Alloc
 // RunSession keeps scheduling incomplete jobs until neither normal placement
 // nor reclaim can make progress in the current session.
 func (s *Scheduler) RunSession(jobs []*api.Job, queues []api.Queue, victims []api.RunningTask) api.AllocationPlan {
-	plan := api.AllocationPlan{Unschedulable: make(map[string]string)}
+	return s.RunSessionDetailed(jobs, queues, victims).Summary()
+}
+
+// RunSessionDetailed preserves the boundaries between normal and reclaim rounds.
+func (s *Scheduler) RunSessionDetailed(jobs []*api.Job, queues []api.Queue, victims []api.RunningTask) api.SessionPlan {
+	plan := api.SessionPlan{}
 	remainingVictims := append([]api.RunningTask(nil), victims...)
 	for {
 		pending := make([]*api.Job, 0, len(jobs))
@@ -107,27 +112,19 @@ func (s *Scheduler) RunSession(jobs []*api.Job, queues []api.Queue, victims []ap
 		}
 
 		normal := s.RunWithQueues(pending, queues)
-		mergePlans(&plan, normal)
+		plan.Rounds = append(plan.Rounds, api.RoundPlan{Kind: "normal", Allocations: normal.Allocations, Evictions: normal.Evictions, Unschedulable: normal.Unschedulable})
 		if len(normal.Allocations) > 0 {
 			continue
 		}
 
 		reclaimed := s.RunWithReclaim(pending, queues, remainingVictims)
-		mergePlans(&plan, reclaimed)
+		plan.Rounds = append(plan.Rounds, api.RoundPlan{Kind: "reclaim", Allocations: reclaimed.Allocations, Evictions: reclaimed.Evictions, Unschedulable: reclaimed.Unschedulable})
 		if len(reclaimed.Allocations) == 0 {
 			break
 		}
 		remainingVictims = removeEvictedVictims(remainingVictims, reclaimed.Evictions)
 	}
 	return plan
-}
-
-func mergePlans(dst *api.AllocationPlan, src api.AllocationPlan) {
-	dst.Allocations = append(dst.Allocations, src.Allocations...)
-	dst.Evictions = append(dst.Evictions, src.Evictions...)
-	for name, reason := range src.Unschedulable {
-		dst.Unschedulable[name] = reason
-	}
 }
 
 func removeEvictedVictims(victims []api.RunningTask, evictions []api.Eviction) []api.RunningTask {

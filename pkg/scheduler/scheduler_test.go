@@ -324,6 +324,30 @@ func TestRunSessionContinuesAfterNormalProgressToReclaimAnotherJob(t *testing.T)
 	}
 }
 
+func TestRunSessionDetailedPreservesRoundBoundaries(t *testing.T) {
+	nodes := []api.Node{
+		{Name: "a", Capacity: api.NewResource(map[string]float64{"gpu": 1}), Labels: map[string]string{"fabric-id": "fa", "gpu-model": "m"}},
+		{Name: "b", Capacity: api.NewResource(map[string]float64{"gpu": 1}), Idle: api.NewResource(map[string]float64{}), Labels: map[string]string{"fabric-id": "fb", "gpu-model": "m"}},
+	}
+	queues := []api.Queue{
+		{Name: "first", Weight: 2, Capability: api.NewResource(map[string]float64{"gpu": 1})},
+		{Name: "waiting", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1}), Guarantee: api.NewResource(map[string]float64{"gpu": 1})},
+		{Name: "training", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1}), Reclaimable: true, Allocated: api.NewResource(map[string]float64{"gpu": 1})},
+	}
+	jobs := []*api.Job{
+		{Name: "first-job", Priority: 100, Queue: "first", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1})},
+		{Name: "waiting-job", Priority: 200, Queue: "waiting", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1}), Topology: &api.Topology{GPUModel: "m", SameFabric: "Required"}},
+	}
+	victims := []api.RunningTask{{JobName: "old", Priority: 10, QueueName: "training", TaskIndex: 0, NodeName: "b", Request: api.NewResource(map[string]float64{"gpu": 1})}}
+	plan := New(nodes).RunSessionDetailed(jobs, queues, victims)
+	if len(plan.Rounds) != 3 || plan.Rounds[0].Kind != "normal" || plan.Rounds[1].Kind != "normal" || plan.Rounds[2].Kind != "reclaim" {
+		t.Fatalf("unexpected rounds: %#v", plan.Rounds)
+	}
+	if summary := plan.Summary(); len(summary.Allocations) != 2 || len(summary.Evictions) != 1 {
+		t.Fatalf("unexpected summary: %#v", summary)
+	}
+}
+
 func TestRunWithReclaimSelectsTargetByDRFOrder(t *testing.T) {
 	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 1}), Idle: api.NewResource(map[string]float64{})}}
 	queues := []api.Queue{
