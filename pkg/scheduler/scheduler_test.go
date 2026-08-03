@@ -216,6 +216,9 @@ func TestReclaimRollsBackEvictionWhenGangIsStillNotReady(t *testing.T) {
 	if len(plan.Evictions) != 0 || len(plan.Allocations) != 0 {
 		t.Fatalf("reclaim leaked into failed plan: %#v", plan)
 	}
+	if queues[0].Allocated["gpu"] != 1 {
+		t.Fatalf("source queue allocation was not restored: %#v", queues[0].Allocated)
+	}
 }
 
 func TestReclaimEvictsOnlyVictimsNeededForGang(t *testing.T) {
