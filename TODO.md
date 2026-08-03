@@ -20,3 +20,9 @@
 最小输出格式：`job=<name> check=<stage> result=<pass|fail|blocked>`。CLI JSON 直接返回 Trace；暂不接入 Kubernetes Event 或日志框架。
 
 验收场景：priority 被阻止的 Reclaim 既输出 `reclaim blocked by priority`，也包含对应的 trace 记录。
+
+## RoundPlan 与 SessionPlan 分层
+
+当前 `AllocationPlan` 是纯内存模拟器的汇总输出，便于 CLI 与测试一次查看整个 Session 的调度决策；它不应被解释为全 Session 的原子提交。
+
+后续拆分为 `RoundPlan`（单轮 Eviction / Allocation）与 `SessionPlan`（`[]RoundPlan` 加可选汇总视图）。接 Kubernetes 时，每个 RoundPlan 成功后即可独立执行 Bind/Evict，而不是等整个 Session 结束。
