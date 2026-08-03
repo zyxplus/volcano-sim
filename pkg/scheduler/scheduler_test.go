@@ -320,3 +320,28 @@ func TestRunSessionContinuesAfterNormalProgressToReclaimAnotherJob(t *testing.T)
 		t.Fatalf("unexpected session plan: %#v", plan)
 	}
 }
+
+func TestRunWithReclaimSelectsTargetByDRFOrder(t *testing.T) {
+	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 1}), Idle: api.NewResource(map[string]float64{})}}
+	queues := []api.Queue{
+		{Name: "blocked", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1}), Guarantee: api.NewResource(map[string]float64{"gpu": 1})},
+		{Name: "ready", Weight: 2, Capability: api.NewResource(map[string]float64{"gpu": 1}), Guarantee: api.NewResource(map[string]float64{"gpu": 1})},
+		{Name: "training", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1}), Reclaimable: true, Allocated: api.NewResource(map[string]float64{"gpu": 1})},
+	}
+	victims := []api.RunningTask{{JobName: "old", Priority: 10, QueueName: "training", TaskIndex: 0, NodeName: "n1", Request: api.NewResource(map[string]float64{"gpu": 1})}}
+	jobs := []*api.Job{
+		{Name: "blocked-job", Priority: 10, Queue: "blocked", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1}), Allocated: api.NewResource(map[string]float64{"gpu": 1})},
+		{Name: "ready-job", Priority: 100, Queue: "ready", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1})},
+	}
+	plan := New(nodes).RunWithReclaim(jobs, queues, victims)
+	if len(plan.Allocations) != 1 || plan.Allocations[0].JobName != "ready-job" {
+		t.Fatalf("unexpected target allocation: %#v", plan)
+	}
+}
+
+func TestRunWithReclaimAcceptsEmptyJobList(t *testing.T) {
+	plan := New([]api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 1})}}).RunWithReclaim(nil, nil, nil)
+	if len(plan.Allocations) != 0 || len(plan.Evictions) != 0 {
+		t.Fatalf("unexpected empty reclaim plan: %#v", plan)
+	}
+}
