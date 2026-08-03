@@ -10,6 +10,8 @@ Job 增加 `batchSize` 与 `scheduledReplicas`。未启动 Job 的首次提交�
 
 每个 batch 成功后更新 Job.Allocated 与 ScheduledReplicas，再重新计算同 Queue 剩余 Job 的 DRF 顺序。
 
+未完成 Job 留在候选集。若完整遍历候选集后没有任一 Job 成功提交 batch，Session 结束并保留不可调度原因，避免无限空转。
+
 ## 验收
 
 两个未完成 Job 都可继续调度；A 提交一个 batch 后 dominant share 上升，下一次 batch 必须优先选择 B。
