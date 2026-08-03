@@ -83,6 +83,15 @@ func (s *Scheduler) RunWithQueues(jobs []api.Job, queues []api.Queue) api.Alloca
 // RunWithReclaim dry-runs victim evictions before attempting waiting gangs.
 // Evictions are retained only when the subsequent allocation succeeds.
 func (s *Scheduler) RunWithReclaim(jobs []api.Job, queues []api.Queue, victims []api.RunningTask) api.AllocationPlan {
+	sort.SliceStable(victims, func(i, j int) bool {
+		if victims[i].Priority != victims[j].Priority {
+			return victims[i].Priority < victims[j].Priority
+		}
+		if victims[i].JobName != victims[j].JobName {
+			return victims[i].JobName < victims[j].JobName
+		}
+		return victims[i].TaskIndex < victims[j].TaskIndex
+	})
 	deserved := proportion.ComputeDeserved(queues, s.total)
 	queueIndex := make(map[string]int, len(queues))
 	for index := range queues {

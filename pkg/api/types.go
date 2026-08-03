@@ -46,6 +46,7 @@ type Task struct {
 // RunningTask is an already placed task that may be selected as a reclaim victim.
 type RunningTask struct {
 	JobName   string
+	Priority  int
 	QueueName string
 	TaskIndex int
 	NodeName  string
