@@ -78,6 +78,32 @@ type AllocationPlan struct {
 	Unschedulable map[string]string `json:"unschedulable"`
 }
 
+// RoundPlan records the result of one normal-scheduling or reclaim attempt.
+type RoundPlan struct {
+	Kind          string            `json:"kind"`
+	Allocations   []Allocation      `json:"allocations"`
+	Evictions     []Eviction        `json:"evictions"`
+	Unschedulable map[string]string `json:"unschedulable"`
+}
+
+// SessionPlan preserves round boundaries while allowing a legacy summary view.
+type SessionPlan struct {
+	Rounds []RoundPlan `json:"rounds"`
+}
+
+// Summary aggregates all round decisions into the legacy plan shape.
+func (p SessionPlan) Summary() AllocationPlan {
+	plan := AllocationPlan{Unschedulable: make(map[string]string)}
+	for _, round := range p.Rounds {
+		plan.Allocations = append(plan.Allocations, round.Allocations...)
+		plan.Evictions = append(plan.Evictions, round.Evictions...)
+		for name, reason := range round.Unschedulable {
+			plan.Unschedulable[name] = reason
+		}
+	}
+	return plan
+}
+
 // ClusterTotal sums the capacity of every node.
 func ClusterTotal(nodes []Node) Resource {
 	total := NewResource(nil)
