@@ -153,6 +153,11 @@ func removeEvictedVictims(victims []api.RunningTask, evictions []api.Eviction) [
 // RunWithReclaim dry-runs victim evictions before attempting waiting gangs.
 // Evictions are retained only when the subsequent allocation succeeds.
 func (s *Scheduler) RunWithReclaim(jobs []*api.Job, queues []api.Queue, victims []api.RunningTask) api.AllocationPlan {
+	plan := api.AllocationPlan{Unschedulable: make(map[string]string)}
+	if len(jobs) == 0 {
+		return plan
+	}
+	target := s.OrderJobs(jobs)[0]
 	sort.SliceStable(victims, func(i, j int) bool {
 		if victims[i].Priority != victims[j].Priority {
 			return victims[i].Priority < victims[j].Priority
@@ -168,11 +173,10 @@ func (s *Scheduler) RunWithReclaim(jobs []*api.Job, queues []api.Queue, victims 
 		queueIndex[queues[index].Name] = index
 	}
 
-	plan := api.AllocationPlan{Unschedulable: make(map[string]string)}
 	priorityBlocked := false
 	need := api.NewResource(nil)
-	for replica := 0; replica < jobs[0].MinAvailable; replica++ {
-		need = need.Add(jobs[0].Request)
+	for replica := 0; replica < target.MinAvailable; replica++ {
+		need = need.Add(target.Request)
 	}
 	available := api.NewResource(nil)
 	for _, node := range s.nodes {
@@ -182,7 +186,7 @@ func (s *Scheduler) RunWithReclaim(jobs []*api.Job, queues []api.Queue, victims 
 		if need.Fits(available) {
 			break
 		}
-		if len(jobs) == 0 || jobs[0].Priority <= victim.Priority {
+		if target.Priority <= victim.Priority {
 			priorityBlocked = true
 			continue
 		}
@@ -201,10 +205,10 @@ func (s *Scheduler) RunWithReclaim(jobs []*api.Job, queues []api.Queue, victims 
 		}
 	}
 
-	allocated := s.RunWithQueues(jobs, queues)
+	allocated := s.RunWithQueues([]*api.Job{target}, queues)
 	if len(allocated.Allocations) == 0 {
-		if priorityBlocked && len(jobs) > 0 {
-			allocated.Unschedulable[jobs[0].Name] = "reclaim blocked by priority"
+		if priorityBlocked {
+			allocated.Unschedulable[target.Name] = "reclaim blocked by priority"
 		}
 		for _, eviction := range plan.Evictions {
 			for _, victim := range victims {
