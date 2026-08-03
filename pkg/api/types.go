@@ -28,6 +28,7 @@ type Queue struct {
 // Job describes identical task replicas that must reach MinAvailable together.
 type Job struct {
 	Name         string    `yaml:"name" json:"name"`
+	Priority     int       `yaml:"priority" json:"priority"`
 	MinAvailable int       `yaml:"minAvailable" json:"minAvailable"`
 	Replicas     int       `yaml:"replicas" json:"replicas"`
 	Request      Resource  `yaml:"request" json:"request"`

@@ -111,6 +111,9 @@ func (s *Scheduler) RunWithReclaim(jobs []api.Job, queues []api.Queue, victims [
 		if need.Fits(available) {
 			break
 		}
+		if len(jobs) == 0 || jobs[0].Priority <= victim.Priority {
+			continue
+		}
 		index, ok := queueIndex[victim.QueueName]
 		if !ok || !queues[index].Reclaimable || !proportion.IsOverused(queues[index], deserved[victim.QueueName]) {
 			continue
