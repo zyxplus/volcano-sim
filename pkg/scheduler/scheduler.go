@@ -30,8 +30,8 @@ func New(nodes []api.Node) *Scheduler {
 }
 
 // OrderJobs returns a sorted copy, preserving the caller's input slice.
-func (s *Scheduler) OrderJobs(jobs []api.Job) []api.Job {
-	ordered := append([]api.Job(nil), jobs...)
+func (s *Scheduler) OrderJobs(jobs []*api.Job) []*api.Job {
+	ordered := append([]*api.Job(nil), jobs...)
 	sort.SliceStable(ordered, func(i, j int) bool {
 		left := ordered[i].Allocated.DominantShare(s.total)
 		right := ordered[j].Allocated.DominantShare(s.total)
@@ -51,13 +51,13 @@ type trialAllocation struct {
 
 // Run schedules each job as one gang transaction. It commits all successful
 // trial allocations only when the transaction reaches MinAvailable.
-func (s *Scheduler) Run(jobs []api.Job) api.AllocationPlan {
+func (s *Scheduler) Run(jobs []*api.Job) api.AllocationPlan {
 	return s.runOrdered(s.OrderJobs(jobs), nil)
 }
 
 // RunWithQueues orders queues by weight, then preserves DRF ordering within each queue.
-func (s *Scheduler) RunWithQueues(jobs []api.Job, queues []api.Queue) api.AllocationPlan {
-	byQueue := make(map[string][]api.Job)
+func (s *Scheduler) RunWithQueues(jobs []*api.Job, queues []api.Queue) api.AllocationPlan {
+	byQueue := make(map[string][]*api.Job)
 	for _, job := range jobs {
 		byQueue[job.Queue] = append(byQueue[job.Queue], job)
 	}
@@ -70,7 +70,7 @@ func (s *Scheduler) RunWithQueues(jobs []api.Job, queues []api.Queue) api.Alloca
 	plan := api.AllocationPlan{Unschedulable: map[string]string{}}
 	for i := range queues {
 		for _, job := range s.OrderJobs(byQueue[queues[i].Name]) {
-			partial := s.runOrdered([]api.Job{job}, &queues[i])
+			partial := s.runOrdered([]*api.Job{job}, &queues[i])
 			plan.Allocations = append(plan.Allocations, partial.Allocations...)
 			for name, reason := range partial.Unschedulable {
 				plan.Unschedulable[name] = reason
@@ -82,7 +82,7 @@ func (s *Scheduler) RunWithQueues(jobs []api.Job, queues []api.Queue) api.Alloca
 
 // RunWithReclaim dry-runs victim evictions before attempting waiting gangs.
 // Evictions are retained only when the subsequent allocation succeeds.
-func (s *Scheduler) RunWithReclaim(jobs []api.Job, queues []api.Queue, victims []api.RunningTask) api.AllocationPlan {
+func (s *Scheduler) RunWithReclaim(jobs []*api.Job, queues []api.Queue, victims []api.RunningTask) api.AllocationPlan {
 	sort.SliceStable(victims, func(i, j int) bool {
 		if victims[i].Priority != victims[j].Priority {
 			return victims[i].Priority < victims[j].Priority
@@ -153,10 +153,10 @@ func (s *Scheduler) RunWithReclaim(jobs []api.Job, queues []api.Queue, victims [
 	return allocated
 }
 
-func (s *Scheduler) runOrdered(jobs []api.Job, queue *api.Queue) api.AllocationPlan {
+func (s *Scheduler) runOrdered(jobs []*api.Job, queue *api.Queue) api.AllocationPlan {
 	plan := api.AllocationPlan{Unschedulable: make(map[string]string)}
 	for _, job := range jobs {
-		candidates, reason := s.selectCandidateNodes(job)
+		candidates, reason := s.selectCandidateNodes(*job)
 		if reason != "" {
 			plan.Unschedulable[job.Name] = reason
 			continue
@@ -197,6 +197,8 @@ func (s *Scheduler) runOrdered(jobs []api.Job, queue *api.Queue) api.AllocationP
 		for _, trial := range journal {
 			plan.Allocations = append(plan.Allocations, trial.allocation)
 		}
+		job.ScheduledReplicas += len(journal)
+		job.Allocated = job.Allocated.Add(journalResource)
 		if queue != nil {
 			queue.Allocated = queue.Allocated.Add(journalResource)
 		}

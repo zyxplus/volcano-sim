@@ -69,6 +69,9 @@ func Load(nodesPath, jobsPath string) ([]api.Node, []api.Job, error) {
 		if job.MinAvailable <= 0 || job.MinAvailable > job.Replicas {
 			return nil, nil, fmt.Errorf("job %q has invalid minAvailable %d for %d replicas", job.Name, job.MinAvailable, job.Replicas)
 		}
+		if job.BatchSize == 0 {
+			job.BatchSize = job.Replicas
+		}
 		if err := validateResource(job.Name, "job", job.Request); err != nil {
 			return nil, nil, err
 		}

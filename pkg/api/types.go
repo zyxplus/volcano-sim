@@ -27,14 +27,16 @@ type Queue struct {
 
 // Job describes identical task replicas that must reach MinAvailable together.
 type Job struct {
-	Name         string    `yaml:"name" json:"name"`
-	Priority     int       `yaml:"priority" json:"priority"`
-	MinAvailable int       `yaml:"minAvailable" json:"minAvailable"`
-	Replicas     int       `yaml:"replicas" json:"replicas"`
-	Request      Resource  `yaml:"request" json:"request"`
-	Queue        string    `yaml:"queue" json:"queue"`
-	Topology     *Topology `yaml:"topology" json:"topology,omitempty"`
-	Allocated    Resource  `yaml:"-" json:"allocated"`
+	Name              string    `yaml:"name" json:"name"`
+	Priority          int       `yaml:"priority" json:"priority"`
+	MinAvailable      int       `yaml:"minAvailable" json:"minAvailable"`
+	Replicas          int       `yaml:"replicas" json:"replicas"`
+	BatchSize         int       `yaml:"batchSize" json:"batchSize"`
+	ScheduledReplicas int       `yaml:"-" json:"scheduledReplicas"`
+	Request           Resource  `yaml:"request" json:"request"`
+	Queue             string    `yaml:"queue" json:"queue"`
+	Topology          *Topology `yaml:"topology" json:"topology,omitempty"`
+	Allocated         Resource  `yaml:"-" json:"allocated"`
 }
 
 // Task identifies one replica of a Job during trial allocation.

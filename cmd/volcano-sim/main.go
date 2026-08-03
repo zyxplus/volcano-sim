@@ -48,6 +48,10 @@ func run(args []string, output io.Writer) error {
 			return err
 		}
 	}
-	plan := scheduler.New(nodes).RunWithQueues(jobs, queues)
+	jobPointers := make([]*api.Job, len(jobs))
+	for index := range jobs {
+		jobPointers[index] = &jobs[index]
+	}
+	plan := scheduler.New(nodes).RunWithQueues(jobPointers, queues)
 	return json.NewEncoder(output).Encode(plan)
 }
