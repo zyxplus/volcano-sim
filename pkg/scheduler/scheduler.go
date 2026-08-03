@@ -90,7 +90,18 @@ func (s *Scheduler) RunWithReclaim(jobs []api.Job, queues []api.Queue, victims [
 	}
 
 	plan := api.AllocationPlan{Unschedulable: make(map[string]string)}
+	need := api.NewResource(nil)
+	for replica := 0; replica < jobs[0].MinAvailable; replica++ {
+		need = need.Add(jobs[0].Request)
+	}
+	available := api.NewResource(nil)
+	for _, node := range s.nodes {
+		available = available.Add(node.Idle)
+	}
 	for _, victim := range victims {
+		if need.Fits(available) {
+			break
+		}
 		index, ok := queueIndex[victim.QueueName]
 		if !ok || !queues[index].Reclaimable || !proportion.IsOverused(queues[index], deserved[victim.QueueName]) {
 			continue
@@ -98,6 +109,7 @@ func (s *Scheduler) RunWithReclaim(jobs []api.Job, queues []api.Queue, victims [
 		for nodeIndex := range s.nodes {
 			if s.nodes[nodeIndex].Name == victim.NodeName {
 				s.nodes[nodeIndex].Idle = s.nodes[nodeIndex].Idle.Add(victim.Request)
+				available = available.Add(victim.Request)
 				queues[index].Allocated = queues[index].Allocated.Sub(victim.Request)
 				plan.Evictions = append(plan.Evictions, api.Eviction{JobName: victim.JobName, TaskIndex: victim.TaskIndex, NodeName: victim.NodeName, Reason: "reclaim"})
 				break
