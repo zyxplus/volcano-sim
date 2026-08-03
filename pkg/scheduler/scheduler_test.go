@@ -186,6 +186,9 @@ func TestReclaimDoesNotEvictHigherPriorityVictim(t *testing.T) {
 	if len(plan.Evictions) != 0 || len(plan.Allocations) != 0 {
 		t.Fatalf("unexpected plan: %#v", plan)
 	}
+	if plan.Unschedulable["low"] != "reclaim blocked by priority" {
+		t.Fatalf("unexpected reason: %#v", plan.Unschedulable)
+	}
 }
 
 func TestReclaimRollsBackEvictionWhenGangIsStillNotReady(t *testing.T) {

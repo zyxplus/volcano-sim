@@ -99,6 +99,7 @@ func (s *Scheduler) RunWithReclaim(jobs []api.Job, queues []api.Queue, victims [
 	}
 
 	plan := api.AllocationPlan{Unschedulable: make(map[string]string)}
+	priorityBlocked := false
 	need := api.NewResource(nil)
 	for replica := 0; replica < jobs[0].MinAvailable; replica++ {
 		need = need.Add(jobs[0].Request)
@@ -112,6 +113,7 @@ func (s *Scheduler) RunWithReclaim(jobs []api.Job, queues []api.Queue, victims [
 			break
 		}
 		if len(jobs) == 0 || jobs[0].Priority <= victim.Priority {
+			priorityBlocked = true
 			continue
 		}
 		index, ok := queueIndex[victim.QueueName]
@@ -131,6 +133,9 @@ func (s *Scheduler) RunWithReclaim(jobs []api.Job, queues []api.Queue, victims [
 
 	allocated := s.RunWithQueues(jobs, queues)
 	if len(allocated.Allocations) == 0 {
+		if priorityBlocked && len(jobs) > 0 {
+			allocated.Unschedulable[jobs[0].Name] = "reclaim blocked by priority"
+		}
 		for _, eviction := range plan.Evictions {
 			for _, victim := range victims {
 				if victim.JobName == eviction.JobName && victim.TaskIndex == eviction.TaskIndex {
