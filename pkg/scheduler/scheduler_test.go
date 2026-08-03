@@ -271,5 +271,18 @@ func TestRunWithQueuesStopsWhenNoPendingJobCanProgress(t *testing.T) {
 	queues := []api.Queue{{Name: "q", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1})}}
 	job := &api.Job{Name: "blocked", Queue: "q", Replicas: 1, MinAvailable: 1, BatchSize: 1, Request: api.NewResource(map[string]float64{"gpu": 1}), Allocated: api.NewResource(nil)}
 	plan := New(nodes).RunWithQueues([]*api.Job{job}, queues)
-	if len(plan.Allocations) != 0 || plan.Unschedulable["blocked"] == "" { t.Fatalf("unexpected plan: %#v", plan) }
+	if len(plan.Allocations) != 0 || plan.Unschedulable["blocked"] == "" {
+		t.Fatalf("unexpected plan: %#v", plan)
+	}
+}
+
+func TestRunSessionReclaimsWhenNormalBatchCannotProgress(t *testing.T) {
+	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 1}), Idle: api.NewResource(map[string]float64{})}}
+	queues := []api.Queue{{Name: "training", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1}), Reclaimable: true, Allocated: api.NewResource(map[string]float64{"gpu": 1})}, {Name: "inference", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1}), Guarantee: api.NewResource(map[string]float64{"gpu": 1})}}
+	victims := []api.RunningTask{{JobName: "old", Priority: 10, QueueName: "training", TaskIndex: 0, NodeName: "n1", Request: api.NewResource(map[string]float64{"gpu": 1})}}
+	job := &api.Job{Name: "new", Priority: 100, Queue: "inference", Replicas: 1, MinAvailable: 1, BatchSize: 1, Request: api.NewResource(map[string]float64{"gpu": 1}), Allocated: api.NewResource(nil)}
+	plan := New(nodes).RunSession([]*api.Job{job}, queues, victims)
+	if len(plan.Evictions) != 1 || len(plan.Allocations) != 1 {
+		t.Fatalf("unexpected plan: %#v", plan)
+	}
 }

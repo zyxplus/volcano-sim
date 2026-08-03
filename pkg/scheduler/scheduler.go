@@ -90,6 +90,15 @@ func (s *Scheduler) RunWithQueues(jobs []*api.Job, queues []api.Queue) api.Alloc
 	return plan
 }
 
+// RunSession prefers normal batch allocation and reclaims only after no job progresses.
+func (s *Scheduler) RunSession(jobs []*api.Job, queues []api.Queue, victims []api.RunningTask) api.AllocationPlan {
+	plan := s.RunWithQueues(jobs, queues)
+	if len(plan.Allocations) > 0 {
+		return plan
+	}
+	return s.RunWithReclaim(jobs, queues, victims)
+}
+
 // RunWithReclaim dry-runs victim evictions before attempting waiting gangs.
 // Evictions are retained only when the subsequent allocation succeeds.
 func (s *Scheduler) RunWithReclaim(jobs []*api.Job, queues []api.Queue, victims []api.RunningTask) api.AllocationPlan {
