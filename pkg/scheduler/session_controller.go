@@ -60,6 +60,11 @@ func (c *SessionController) Apply(event SessionEvent) error {
 		if _, exists := c.jobs[event.JobName]; !exists {
 			return fmt.Errorf("job %q does not exist", event.JobName)
 		}
+		for _, task := range c.victims {
+			if task.JobName == event.JobName {
+				return fmt.Errorf("job %q still has running tasks", event.JobName)
+			}
+		}
 		delete(c.jobs, event.JobName)
 	case EventAddNode:
 		if event.Node == nil || event.Node.Name == "" {

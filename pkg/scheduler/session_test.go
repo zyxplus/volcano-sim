@@ -107,3 +107,21 @@ func TestSessionControllerRejectsRemovingBusyNode(t *testing.T) {
 		t.Fatalf("idle node removal failed: %v", err)
 	}
 }
+
+func TestSessionControllerRejectsRemovingBusyJob(t *testing.T) {
+	controller := NewSessionController(
+		[]api.NodeSpec{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 1})}},
+		[]*api.Job{{Name: "job", Queue: "q", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1})}},
+		[]api.Queue{{Name: "q", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1})}},
+		[]api.RunningTask{{JobName: "job", QueueName: "q", NodeName: "n1", TaskIndex: 0, Request: api.NewResource(map[string]float64{"gpu": 1})}},
+	)
+	if err := controller.Apply(SessionEvent{Kind: EventRemoveJob, JobName: "job"}); err == nil {
+		t.Fatal("busy job removal was accepted")
+	}
+	if err := controller.Apply(SessionEvent{Kind: EventUpdateRunningTasks}); err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.Apply(SessionEvent{Kind: EventRemoveJob, JobName: "job"}); err != nil {
+		t.Fatalf("idle job removal failed: %v", err)
+	}
+}
