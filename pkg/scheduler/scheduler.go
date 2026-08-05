@@ -213,8 +213,11 @@ func (s *Scheduler) RunWithReclaim(jobs []*api.Job, queues []api.Queue, victims 
 		for _, eviction := range plan.Evictions {
 			for _, victim := range victims {
 				if victim.JobName == eviction.JobName && victim.TaskIndex == eviction.TaskIndex && victim.NodeName == eviction.NodeName {
-					if index, ok := queueIndex[victim.QueueName]; ok {
-						queues[index].Allocated = queues[index].Allocated.Add(victim.Request)
+					for index := range queues {
+						if queues[index].Name == victim.QueueName {
+							queues[index].Allocated = queues[index].Allocated.Add(victim.Request)
+							break
+						}
 					}
 					for nodeIndex := range s.nodes {
 						if s.nodes[nodeIndex].Name == victim.NodeName {

@@ -218,15 +218,20 @@ func TestReclaimDoesNotEvictHigherPriorityVictim(t *testing.T) {
 
 func TestReclaimRollsBackEvictionWhenGangIsStillNotReady(t *testing.T) {
 	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 1}), Idle: api.NewResource(map[string]float64{})}}
-	queues := []api.Queue{{Name: "training", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1}), Reclaimable: true, Allocated: api.NewResource(map[string]float64{"gpu": 1})}, {Name: "inference", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 2}), Guarantee: api.NewResource(map[string]float64{"gpu": 2})}}
+	queues := []api.Queue{{Name: "training", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1}), Reclaimable: true, Allocated: api.NewResource(map[string]float64{"gpu": 1})}, {Name: "inference", Weight: 2, Capability: api.NewResource(map[string]float64{"gpu": 2}), Guarantee: api.NewResource(map[string]float64{"gpu": 2})}}
 	victims := []api.RunningTask{{JobName: "old", QueueName: "training", TaskIndex: 0, NodeName: "n1", Request: api.NewResource(map[string]float64{"gpu": 1})}}
 	jobs := []api.Job{{Name: "new", Priority: 100, Queue: "inference", Replicas: 2, MinAvailable: 2, Request: api.NewResource(map[string]float64{"gpu": 1})}}
 	plan := New(nodes).RunWithReclaim(jobPtrs(jobs), queues, victims)
 	if len(plan.Evictions) != 0 || len(plan.Allocations) != 0 {
 		t.Fatalf("reclaim leaked into failed plan: %#v", plan)
 	}
-	if queues[0].Allocated["gpu"] != 1 {
-		t.Fatalf("source queue allocation was not restored: %#v", queues[0].Allocated)
+	for _, queue := range queues {
+		if queue.Name == "training" && queue.Allocated["gpu"] != 1 {
+			t.Fatalf("source queue allocation was not restored: %#v", queues)
+		}
+		if queue.Name == "inference" && queue.Allocated["gpu"] != 0 {
+			t.Fatalf("unrelated queue allocation changed: %#v", queues)
+		}
 	}
 }
 
