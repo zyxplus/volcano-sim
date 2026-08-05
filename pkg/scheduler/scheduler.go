@@ -118,7 +118,18 @@ func (s *Scheduler) RunSessionDetailed(jobs []*api.Job, queues []api.Queue, vict
 			continue
 		}
 
-		reclaimed := s.RunWithReclaim(pending, queues, remainingVictims)
+		reclaimed := api.AllocationPlan{Unschedulable: make(map[string]string)}
+		for _, candidate := range s.OrderJobs(pending) {
+			attempt := s.RunWithReclaim([]*api.Job{candidate}, queues, remainingVictims)
+			reclaimed.Allocations = append(reclaimed.Allocations, attempt.Allocations...)
+			reclaimed.Evictions = append(reclaimed.Evictions, attempt.Evictions...)
+			for name, reason := range attempt.Unschedulable {
+				reclaimed.Unschedulable[name] = reason
+			}
+			if len(attempt.Allocations) > 0 {
+				break
+			}
+		}
 		plan.Rounds = append(plan.Rounds, api.RoundPlan{Kind: "reclaim", Allocations: reclaimed.Allocations, Evictions: reclaimed.Evictions, Unschedulable: reclaimed.Unschedulable})
 		if len(reclaimed.Allocations) == 0 {
 			break
