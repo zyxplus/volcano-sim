@@ -9,6 +9,21 @@ type Node struct {
 	Idle     Resource          `yaml:"-" json:"idle"`
 }
 
+// NodeSpec is the immutable node configuration used to initialize sessions.
+type NodeSpec struct {
+	Name     string
+	Capacity Resource
+	Labels   map[string]string
+}
+
+// NodeState is the mutable state of one node inside a scheduling session.
+type NodeState struct {
+	Name     string
+	Capacity Resource
+	Labels   map[string]string
+	Idle     Resource
+}
+
 // Topology constrains where a Job's task replicas may be placed.
 type Topology struct {
 	GPUModel   string `yaml:"gpuModel" json:"gpuModel"`

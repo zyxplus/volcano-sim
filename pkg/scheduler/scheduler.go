@@ -9,24 +9,46 @@ import (
 
 // Scheduler owns mutable node-idle state for one in-memory scheduling session.
 type Scheduler struct {
-	nodes []api.Node
+	nodes []api.NodeState
 	total api.Resource
 }
 
 // New creates a scheduler whose node state is independent of the caller.
 func New(nodes []api.Node) *Scheduler {
-	cloned := make([]api.Node, len(nodes))
+	specs := make([]api.NodeSpec, len(nodes))
 	for i, node := range nodes {
-		cloned[i] = node
-		cloned[i].Capacity = api.NewResource(node.Capacity)
+		specs[i] = api.NodeSpec{Name: node.Name, Capacity: node.Capacity, Labels: node.Labels}
+	}
+	scheduler := NewFromSpecs(specs)
+	for _, node := range nodes {
 		if node.Idle == nil {
-			cloned[i].Idle = api.NewResource(node.Capacity)
-		} else {
-			cloned[i].Idle = api.NewResource(node.Idle)
+			continue
+		}
+		for index := range scheduler.nodes {
+			if scheduler.nodes[index].Name == node.Name {
+				scheduler.nodes[index].Idle = api.NewResource(node.Idle)
+				break
+			}
 		}
 	}
-	sort.Slice(cloned, func(i, j int) bool { return cloned[i].Name < cloned[j].Name })
-	return &Scheduler{nodes: cloned, total: api.ClusterTotal(cloned)}
+	return scheduler
+}
+
+// NewFromSpecs creates a fresh scheduling state from immutable node specs.
+func NewFromSpecs(specs []api.NodeSpec) *Scheduler {
+	states := make([]api.NodeState, len(specs))
+	total := api.NewResource(nil)
+	for i, spec := range specs {
+		labels := make(map[string]string, len(spec.Labels))
+		for key, value := range spec.Labels {
+			labels[key] = value
+		}
+		capacity := api.NewResource(spec.Capacity)
+		states[i] = api.NodeState{Name: spec.Name, Capacity: capacity, Labels: labels, Idle: api.NewResource(capacity)}
+		total = total.Add(capacity)
+	}
+	sort.Slice(states, func(i, j int) bool { return states[i].Name < states[j].Name })
+	return &Scheduler{nodes: states, total: total}
 }
 
 // OrderJobs returns a sorted copy, preserving the caller's input slice.
