@@ -106,6 +106,47 @@ func (c *SessionController) Run() api.AllocationPlan {
 	return New(nodes).RunSession(jobs, cloneQueues(c.queues), c.victims)
 }
 
+// Commit applies a plan to the in-memory running-task snapshot.
+func (c *SessionController) Commit(plan api.AllocationPlan) error {
+	for _, eviction := range plan.Evictions {
+		removed := false
+		remaining := make([]api.RunningTask, 0, len(c.victims))
+		for _, task := range c.victims {
+			if task.JobName == eviction.JobName && task.TaskIndex == eviction.TaskIndex && task.NodeName == eviction.NodeName {
+				removed = true
+				continue
+			}
+			remaining = append(remaining, task)
+		}
+		if !removed {
+			return fmt.Errorf("eviction target %s/%d on %s does not exist", eviction.JobName, eviction.TaskIndex, eviction.NodeName)
+		}
+		c.victims = remaining
+	}
+	for _, allocation := range plan.Allocations {
+		job, ok := c.jobs[allocation.JobName]
+		if !ok {
+			return fmt.Errorf("allocation job %q does not exist", allocation.JobName)
+		}
+		for _, task := range c.victims {
+			if task.JobName == allocation.JobName && task.TaskIndex == allocation.TaskIndex && task.NodeName == allocation.NodeName {
+				return fmt.Errorf("allocation target %s/%d on %s already exists", allocation.JobName, allocation.TaskIndex, allocation.NodeName)
+			}
+		}
+		c.victims = append(c.victims, api.RunningTask{
+			JobName:            job.Name,
+			Priority:           job.Priority,
+			QueueName:          job.Queue,
+			TaskIndex:          allocation.TaskIndex,
+			NodeName:           allocation.NodeName,
+			Request:            api.NewResource(job.Request),
+			JobMinAvailable:    job.MinAvailable,
+			JobRunningReplicas: job.ScheduledReplicas,
+		})
+	}
+	return nil
+}
+
 func (c *SessionController) rebuildRuntimeState() {
 	for _, job := range c.jobs {
 		job.ScheduledReplicas = 0
