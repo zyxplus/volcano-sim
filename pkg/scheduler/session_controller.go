@@ -73,6 +73,11 @@ func (c *SessionController) Apply(event SessionEvent) error {
 		if _, exists := c.nodes[event.NodeName]; !exists {
 			return fmt.Errorf("node %q does not exist", event.NodeName)
 		}
+		for _, task := range c.victims {
+			if task.NodeName == event.NodeName {
+				return fmt.Errorf("node %q still has running tasks", event.NodeName)
+			}
+		}
 		delete(c.nodes, event.NodeName)
 	case EventUpdateRunningTasks:
 		c.victims = append([]api.RunningTask(nil), event.RunningTasks...)

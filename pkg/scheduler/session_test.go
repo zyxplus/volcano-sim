@@ -89,3 +89,21 @@ func TestSessionControllerCommitIsAtomic(t *testing.T) {
 		t.Fatalf("partial commit released the old task: %#v", next)
 	}
 }
+
+func TestSessionControllerRejectsRemovingBusyNode(t *testing.T) {
+	controller := NewSessionController(
+		[]api.NodeSpec{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 1})}},
+		nil,
+		nil,
+		[]api.RunningTask{{JobName: "job", NodeName: "n1", TaskIndex: 0, Request: api.NewResource(map[string]float64{"gpu": 1})}},
+	)
+	if err := controller.Apply(SessionEvent{Kind: EventRemoveNode, NodeName: "n1"}); err == nil {
+		t.Fatal("busy node removal was accepted")
+	}
+	if err := controller.Apply(SessionEvent{Kind: EventUpdateRunningTasks}); err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.Apply(SessionEvent{Kind: EventRemoveNode, NodeName: "n1"}); err != nil {
+		t.Fatalf("idle node removal failed: %v", err)
+	}
+}
