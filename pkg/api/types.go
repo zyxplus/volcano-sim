@@ -94,6 +94,22 @@ type AllocationPlan struct {
 	Allocations   []Allocation      `json:"allocations"`
 	Evictions     []Eviction        `json:"evictions"`
 	Unschedulable map[string]string `json:"unschedulable"`
+	Issues        []ValidationIssue `json:"issues,omitempty"`
+}
+
+type ValidationSeverity string
+
+const (
+	ValidationFatal    ValidationSeverity = "fatal"
+	ValidationJobError ValidationSeverity = "jobError"
+	ValidationWarning  ValidationSeverity = "warning"
+)
+
+type ValidationIssue struct {
+	Severity ValidationSeverity `json:"severity"`
+	Object   string             `json:"object"`
+	Name     string             `json:"name"`
+	Message  string             `json:"message"`
 }
 
 // RoundPlan records the result of one normal-scheduling or reclaim attempt.
@@ -102,6 +118,7 @@ type RoundPlan struct {
 	Allocations   []Allocation      `json:"allocations"`
 	Evictions     []Eviction        `json:"evictions"`
 	Unschedulable map[string]string `json:"unschedulable"`
+	Issues        []ValidationIssue `json:"issues,omitempty"`
 }
 
 // SessionPlan preserves round boundaries while allowing a legacy summary view.
@@ -118,6 +135,7 @@ func (p SessionPlan) Summary() AllocationPlan {
 		for name, reason := range round.Unschedulable {
 			plan.Unschedulable[name] = reason
 		}
+		plan.Issues = append(plan.Issues, round.Issues...)
 	}
 	return plan
 }
