@@ -159,3 +159,19 @@ func TestSessionControllerRejectsInvalidRunningTaskReferences(t *testing.T) {
 		t.Fatalf("invalid update replaced the old snapshot: %#v", plan)
 	}
 }
+
+func TestSessionControllerRejectsDuplicateRunningTasks(t *testing.T) {
+	controller := NewSessionController(
+		[]api.NodeSpec{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 2})}},
+		[]*api.Job{{Name: "job", Queue: "q", Replicas: 2, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1})}},
+		[]api.Queue{{Name: "q", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 2})}},
+		nil,
+	)
+	tasks := []api.RunningTask{
+		{JobName: "job", QueueName: "q", NodeName: "n1", TaskIndex: 0, Request: api.NewResource(map[string]float64{"gpu": 1})},
+		{JobName: "job", QueueName: "q", NodeName: "n1", TaskIndex: 0, Request: api.NewResource(map[string]float64{"gpu": 1})},
+	}
+	if err := controller.Apply(SessionEvent{Kind: EventUpdateRunningTasks, RunningTasks: tasks}); err == nil {
+		t.Fatal("duplicate running task was accepted")
+	}
+}
