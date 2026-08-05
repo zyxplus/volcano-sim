@@ -89,7 +89,13 @@ func (c *SessionController) Apply(event SessionEvent) error {
 		}
 		delete(c.nodes, event.NodeName)
 	case EventUpdateRunningTasks:
+		seenTasks := make(map[string]struct{}, len(event.RunningTasks))
 		for _, task := range event.RunningTasks {
+			identity := fmt.Sprintf("%s/%d", task.JobName, task.TaskIndex)
+			if _, exists := seenTasks[identity]; exists {
+				return fmt.Errorf("running task %s is duplicated", identity)
+			}
+			seenTasks[identity] = struct{}{}
 			if _, exists := c.jobs[task.JobName]; !exists {
 				return fmt.Errorf("running task references missing job %q", task.JobName)
 			}
