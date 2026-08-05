@@ -144,3 +144,18 @@ func TestSessionControllerSupportsConcurrentRuns(t *testing.T) {
 	}
 	group.Wait()
 }
+
+func TestSessionControllerRejectsInvalidRunningTaskReferences(t *testing.T) {
+	controller := NewSessionController(
+		[]api.NodeSpec{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 1})}},
+		[]*api.Job{{Name: "job", Queue: "q", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1})}},
+		[]api.Queue{{Name: "q", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1})}},
+		[]api.RunningTask{{JobName: "job", QueueName: "q", NodeName: "n1", TaskIndex: 0, Request: api.NewResource(map[string]float64{"gpu": 1})}},
+	)
+	if err := controller.Apply(SessionEvent{Kind: EventUpdateRunningTasks, RunningTasks: []api.RunningTask{{JobName: "job", QueueName: "q", NodeName: "missing", TaskIndex: 0, Request: api.NewResource(map[string]float64{"gpu": 1})}}}); err == nil {
+		t.Fatal("invalid running task reference was accepted")
+	}
+	if plan := controller.Run(); len(plan.Allocations) != 0 {
+		t.Fatalf("invalid update replaced the old snapshot: %#v", plan)
+	}
+}

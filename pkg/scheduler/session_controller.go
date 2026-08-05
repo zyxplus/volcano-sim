@@ -89,6 +89,24 @@ func (c *SessionController) Apply(event SessionEvent) error {
 		}
 		delete(c.nodes, event.NodeName)
 	case EventUpdateRunningTasks:
+		for _, task := range event.RunningTasks {
+			if _, exists := c.jobs[task.JobName]; !exists {
+				return fmt.Errorf("running task references missing job %q", task.JobName)
+			}
+			if _, exists := c.nodes[task.NodeName]; !exists {
+				return fmt.Errorf("running task references missing node %q", task.NodeName)
+			}
+			queueExists := false
+			for _, queue := range c.queues {
+				if queue.Name == task.QueueName {
+					queueExists = true
+					break
+				}
+			}
+			if !queueExists {
+				return fmt.Errorf("running task references missing queue %q", task.QueueName)
+			}
+		}
 		c.victims = append([]api.RunningTask(nil), event.RunningTasks...)
 	default:
 		return fmt.Errorf("unknown session event %q", event.Kind)
