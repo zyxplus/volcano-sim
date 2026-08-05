@@ -56,6 +56,7 @@ func (s *Scheduler) Run(jobs []*api.Job) api.AllocationPlan {
 }
 
 // RunWithQueues orders queues by weight, then preserves DRF ordering within each queue.
+// The queues slice is session state: its order and Allocated fields may change.
 func (s *Scheduler) RunWithQueues(jobs []*api.Job, queues []api.Queue) api.AllocationPlan {
 	byQueue := make(map[string][]*api.Job)
 	for _, job := range jobs {
@@ -149,6 +150,8 @@ func removeEvictedVictims(victims []api.RunningTask, evictions []api.Eviction) [
 
 // RunWithReclaim dry-runs victim evictions before attempting waiting gangs.
 // Evictions are retained only when the subsequent allocation succeeds.
+// Successful reclaim persists source-queue Allocated changes in queues; failed
+// reclaim restores them before returning.
 func (s *Scheduler) RunWithReclaim(jobs []*api.Job, queues []api.Queue, victims []api.RunningTask) api.AllocationPlan {
 	plan := api.AllocationPlan{Unschedulable: make(map[string]string)}
 	if len(jobs) == 0 {
