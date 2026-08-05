@@ -58,8 +58,17 @@ func (s *Scheduler) Run(jobs []*api.Job) api.AllocationPlan {
 // RunWithQueues orders queues by weight, then preserves DRF ordering within each queue.
 // The queues slice is session state: its order and Allocated fields may change.
 func (s *Scheduler) RunWithQueues(jobs []*api.Job, queues []api.Queue) api.AllocationPlan {
+	plan := api.AllocationPlan{Unschedulable: map[string]string{}}
+	knownQueues := make(map[string]struct{}, len(queues))
+	for _, queue := range queues {
+		knownQueues[queue.Name] = struct{}{}
+	}
 	byQueue := make(map[string][]*api.Job)
 	for _, job := range jobs {
+		if _, ok := knownQueues[job.Queue]; !ok {
+			plan.Unschedulable[job.Name] = "queue not found"
+			continue
+		}
 		byQueue[job.Queue] = append(byQueue[job.Queue], job)
 	}
 	sort.SliceStable(queues, func(i, j int) bool {
@@ -68,7 +77,6 @@ func (s *Scheduler) RunWithQueues(jobs []*api.Job, queues []api.Queue) api.Alloc
 		}
 		return queues[i].Weight > queues[j].Weight
 	})
-	plan := api.AllocationPlan{Unschedulable: map[string]string{}}
 	for i := range queues {
 		pending := append([]*api.Job(nil), byQueue[queues[i].Name]...)
 		for len(pending) > 0 {
