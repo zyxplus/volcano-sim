@@ -30,6 +30,18 @@ func TestOrderJobsUsesLowestDominantShareFirst(t *testing.T) {
 	}
 }
 
+func TestNewFromSpecsCreatesIndependentNodeState(t *testing.T) {
+	specs := []api.NodeSpec{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 1})}}
+	job := &api.Job{Name: "job", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1})}
+	if plan := NewFromSpecs(specs).Run([]*api.Job{job}); len(plan.Allocations) != 1 {
+		t.Fatalf("first scheduler allocation count = %d, want 1", len(plan.Allocations))
+	}
+	job = &api.Job{Name: "job", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1})}
+	if plan := NewFromSpecs(specs).Run([]*api.Job{job}); len(plan.Allocations) != 1 {
+		t.Fatalf("second scheduler inherited node state: %#v", plan)
+	}
+}
+
 func TestRunRollsBackJobWhenGangCannotReachMinimum(t *testing.T) {
 	scheduler := New([]api.Node{{
 		Name:     "n1",
