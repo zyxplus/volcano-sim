@@ -3,6 +3,7 @@ package scheduler
 import (
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/zhouyingxiao/volcano-sim/pkg/api"
 )
@@ -29,6 +30,7 @@ type SessionEvent struct {
 
 // SessionController owns mutable input snapshots across independent Sessions.
 type SessionController struct {
+	mu      sync.Mutex
 	nodes   map[string]api.NodeSpec
 	jobs    map[string]*api.Job
 	queues  []api.Queue
@@ -47,6 +49,8 @@ func NewSessionController(nodes []api.NodeSpec, jobs []*api.Job, queues []api.Qu
 }
 
 func (c *SessionController) Apply(event SessionEvent) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	switch event.Kind {
 	case EventAddJob:
 		if event.Job == nil || event.Job.Name == "" {
@@ -94,6 +98,8 @@ func (c *SessionController) Apply(event SessionEvent) error {
 
 // Run creates a fresh Scheduler from the current input snapshot.
 func (c *SessionController) Run() api.AllocationPlan {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.rebuildRuntimeState()
 	nodes := make([]api.Node, 0, len(c.nodes))
 	for _, spec := range c.nodes {
@@ -118,6 +124,8 @@ func (c *SessionController) Run() api.AllocationPlan {
 
 // Commit applies a plan to the in-memory running-task snapshot.
 func (c *SessionController) Commit(plan api.AllocationPlan) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	working := append([]api.RunningTask(nil), c.victims...)
 	for _, eviction := range plan.Evictions {
 		removed := false
