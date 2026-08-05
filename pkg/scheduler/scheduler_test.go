@@ -42,6 +42,19 @@ func TestNewFromSpecsCreatesIndependentNodeState(t *testing.T) {
 	}
 }
 
+func TestResetRestoresNodeStateFromSpecs(t *testing.T) {
+	scheduler := NewFromSpecs([]api.NodeSpec{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 1})}})
+	firstJob := &api.Job{Name: "first", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1})}
+	if plan := scheduler.Run([]*api.Job{firstJob}); len(plan.Allocations) != 1 {
+		t.Fatalf("first allocation count = %d, want 1", len(plan.Allocations))
+	}
+	scheduler.Reset()
+	secondJob := &api.Job{Name: "second", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1})}
+	if plan := scheduler.Run([]*api.Job{secondJob}); len(plan.Allocations) != 1 {
+		t.Fatalf("reset did not restore node state: %#v", plan)
+	}
+}
+
 func TestRunRollsBackJobWhenGangCannotReachMinimum(t *testing.T) {
 	scheduler := New([]api.Node{{
 		Name:     "n1",
