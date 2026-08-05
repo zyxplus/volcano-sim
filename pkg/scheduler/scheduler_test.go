@@ -322,6 +322,26 @@ func TestRunWithQueuesReportsUnknownQueue(t *testing.T) {
 	}
 }
 
+func TestRunWithQueuesRejectsDuplicateQueueNames(t *testing.T) {
+	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 2})}}
+	queues := []api.Queue{
+		{Name: "duplicate", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1})},
+		{Name: "duplicate", Weight: 2, Capability: api.NewResource(map[string]float64{"gpu": 1})},
+		{Name: "known", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1})},
+	}
+	jobs := []*api.Job{
+		{Name: "duplicate-job", Queue: "duplicate", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1})},
+		{Name: "known-job", Queue: "known", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1})},
+	}
+	plan := New(nodes).RunWithQueues(jobs, queues)
+	if len(plan.Allocations) != 1 || plan.Allocations[0].JobName != "known-job" {
+		t.Fatalf("unexpected allocations: %#v", plan.Allocations)
+	}
+	if plan.Unschedulable["duplicate-job"] != "queue duplicated" {
+		t.Fatalf("unexpected duplicate queue reason: %#v", plan.Unschedulable)
+	}
+}
+
 func TestRunSessionReclaimsWhenNormalBatchCannotProgress(t *testing.T) {
 	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 1}), Idle: api.NewResource(map[string]float64{})}}
 	queues := []api.Queue{{Name: "training", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1}), Reclaimable: true, Allocated: api.NewResource(map[string]float64{"gpu": 1})}, {Name: "inference", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1}), Guarantee: api.NewResource(map[string]float64{"gpu": 1})}}

@@ -60,11 +60,19 @@ func (s *Scheduler) Run(jobs []*api.Job) api.AllocationPlan {
 func (s *Scheduler) RunWithQueues(jobs []*api.Job, queues []api.Queue) api.AllocationPlan {
 	plan := api.AllocationPlan{Unschedulable: map[string]string{}}
 	knownQueues := make(map[string]struct{}, len(queues))
+	duplicateQueues := make(map[string]struct{})
 	for _, queue := range queues {
+		if _, exists := knownQueues[queue.Name]; exists {
+			duplicateQueues[queue.Name] = struct{}{}
+		}
 		knownQueues[queue.Name] = struct{}{}
 	}
 	byQueue := make(map[string][]*api.Job)
 	for _, job := range jobs {
+		if _, duplicated := duplicateQueues[job.Queue]; duplicated {
+			plan.Unschedulable[job.Name] = "queue duplicated"
+			continue
+		}
 		if _, ok := knownQueues[job.Queue]; !ok {
 			plan.Unschedulable[job.Name] = "queue not found"
 			continue
