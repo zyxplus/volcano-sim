@@ -41,6 +41,7 @@
 - Statement / Journal 独立抽象：当前局部 `trialAllocation` 已能满足模拟器。
 - RoundPlan / SessionPlan 扩展：当前主要是结果组织，不是调度核心。
 - Kubernetes Bind / Evict 执行器：等调度决策语义稳定后再接入。
+- Plan revision / MVCC：当前 SessionController 采用 `Run → Commit` 顺序约束，暂不实现旧 Plan 检测；接入异步执行器或并发反馈后再增加 revision。
 
 ## 动态 DRF 重排
 
