@@ -70,3 +70,22 @@ func TestSessionControllerCommitsAllocationIntoRunningTasks(t *testing.T) {
 		t.Fatalf("committed allocation was repeated: %#v", next)
 	}
 }
+
+func TestSessionControllerCommitIsAtomic(t *testing.T) {
+	controller := NewSessionController(
+		[]api.NodeSpec{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 1})}},
+		[]*api.Job{{Name: "old", Queue: "q", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1})}},
+		[]api.Queue{{Name: "q", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1})}},
+		[]api.RunningTask{{JobName: "old", QueueName: "q", NodeName: "n1", TaskIndex: 0, Request: api.NewResource(map[string]float64{"gpu": 1})}},
+	)
+	plan := api.AllocationPlan{
+		Evictions:   []api.Eviction{{JobName: "old", TaskIndex: 0, NodeName: "n1"}},
+		Allocations: []api.Allocation{{JobName: "missing", TaskIndex: 0, NodeName: "n1"}},
+	}
+	if err := controller.Commit(plan); err == nil {
+		t.Fatal("invalid mixed plan was accepted")
+	}
+	if next := controller.Run(); len(next.Allocations) != 0 {
+		t.Fatalf("partial commit released the old task: %#v", next)
+	}
+}
