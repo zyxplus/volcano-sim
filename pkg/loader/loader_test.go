@@ -86,10 +86,27 @@ func TestLoadQueues(t *testing.T) {
 func TestLoadQueuesReadsGuaranteeAndReclaimable(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "queues.yaml")
-	if err := os.WriteFile(path, []byte("queues:\n  - name: training\n    weight: 1\n    capability: {gpu: 8}\n    guarantee: {gpu: 4}\n    reclaimable: true\n"), 0o600); err != nil { t.Fatal(err) }
+	if err := os.WriteFile(path, []byte("queues:\n  - name: training\n    weight: 1\n    capability: {gpu: 8}\n    guarantee: {gpu: 4}\n    reclaimable: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	queues, err := LoadQueues(path)
-	if err != nil { t.Fatal(err) }
-	if queues[0].Guarantee["gpu"] != 4 || !queues[0].Reclaimable { t.Fatalf("unexpected queue: %#v", queues[0]) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queues[0].Guarantee["gpu"] != 4 || !queues[0].Reclaimable {
+		t.Fatalf("unexpected queue: %#v", queues[0])
+	}
+}
+
+func TestLoadQueuesRejectsDuplicateNames(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "queues.yaml")
+	if err := os.WriteFile(path, []byte("queues:\n  - name: training\n    weight: 1\n    capability: {gpu: 4}\n  - name: training\n    weight: 2\n    capability: {gpu: 8}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadQueues(path); err == nil {
+		t.Fatal("LoadQueues accepted duplicate queue names")
+	}
 }
 
 func TestLoadAssignsDefaultQueueToJobWithoutQueue(t *testing.T) {
