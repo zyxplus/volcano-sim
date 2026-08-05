@@ -79,32 +79,50 @@ func (s *Scheduler) RunWithQueues(jobs []*api.Job, queues []api.Queue) api.Alloc
 		}
 		byQueue[job.Queue] = append(byQueue[job.Queue], job)
 	}
-	sort.SliceStable(queues, func(i, j int) bool {
-		if queues[i].Weight == queues[j].Weight {
-			return queues[i].Name < queues[j].Name
-		}
-		return queues[i].Weight > queues[j].Weight
-	})
-	for i := range queues {
-		pending := append([]*api.Job(nil), byQueue[queues[i].Name]...)
-		for len(pending) > 0 {
-			job := s.OrderJobs(pending)[0]
-			partial := s.runOrdered([]*api.Job{job}, &queues[i])
-			plan.Allocations = append(plan.Allocations, partial.Allocations...)
-			for name, reason := range partial.Unschedulable {
-				plan.Unschedulable[name] = reason
+	deserved := proportion.ComputeDeserved(queues, s.total)
+	for {
+		bestIndex := -1
+		for index := range queues {
+			if len(byQueue[queues[index].Name]) == 0 {
+				continue
 			}
-			if len(partial.Allocations) == 0 || job.ScheduledReplicas >= job.Replicas {
-				for index, candidate := range pending {
-					if candidate == job {
-						pending = append(pending[:index], pending[index+1:]...)
-						break
-					}
+			if bestIndex < 0 || queueComesBefore(queues[index], queues[bestIndex], deserved, s.total) {
+				bestIndex = index
+			}
+		}
+		if bestIndex < 0 {
+			break
+		}
+		queue := &queues[bestIndex]
+		pending := byQueue[queue.Name]
+		job := s.OrderJobs(pending)[0]
+		partial := s.runOrdered([]*api.Job{job}, queue)
+		plan.Allocations = append(plan.Allocations, partial.Allocations...)
+		for name, reason := range partial.Unschedulable {
+			plan.Unschedulable[name] = reason
+		}
+		if len(partial.Allocations) == 0 || job.ScheduledReplicas >= job.Replicas {
+			for index, candidate := range pending {
+				if candidate == job {
+					byQueue[queue.Name] = append(pending[:index], pending[index+1:]...)
+					break
 				}
 			}
 		}
 	}
 	return plan
+}
+
+func queueComesBefore(left, right api.Queue, deserved map[string]api.Resource, total api.Resource) bool {
+	leftDeficit := proportion.Deficit(left, deserved[left.Name], total)
+	rightDeficit := proportion.Deficit(right, deserved[right.Name], total)
+	if leftDeficit != rightDeficit {
+		return leftDeficit > rightDeficit
+	}
+	if left.Weight != right.Weight {
+		return left.Weight > right.Weight
+	}
+	return left.Name < right.Name
 }
 
 // RunSession keeps scheduling incomplete jobs until neither normal placement
