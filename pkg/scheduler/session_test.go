@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/zhouyingxiao/volcano-sim/pkg/api"
@@ -124,4 +125,22 @@ func TestSessionControllerRejectsRemovingBusyJob(t *testing.T) {
 	if err := controller.Apply(SessionEvent{Kind: EventRemoveJob, JobName: "job"}); err != nil {
 		t.Fatalf("idle job removal failed: %v", err)
 	}
+}
+
+func TestSessionControllerSupportsConcurrentRuns(t *testing.T) {
+	controller := NewSessionController(
+		[]api.NodeSpec{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 1})}},
+		nil,
+		nil,
+		nil,
+	)
+	var group sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			_ = controller.Run()
+		}()
+	}
+	group.Wait()
 }
