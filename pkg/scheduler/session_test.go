@@ -51,3 +51,22 @@ func TestSessionControllerRebuildsRuntimeStateFromRunningTasks(t *testing.T) {
 		t.Fatalf("runtime state was not rebuilt: %#v", plan)
 	}
 }
+
+func TestSessionControllerCommitsAllocationIntoRunningTasks(t *testing.T) {
+	controller := NewSessionController(
+		[]api.NodeSpec{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 1})}},
+		[]*api.Job{{Name: "job", Queue: "q", Replicas: 1, MinAvailable: 1, Request: api.NewResource(map[string]float64{"gpu": 1})}},
+		[]api.Queue{{Name: "q", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 1})}},
+		nil,
+	)
+	plan := controller.Run()
+	if len(plan.Allocations) != 1 {
+		t.Fatalf("initial plan = %#v", plan)
+	}
+	if err := controller.Commit(plan); err != nil {
+		t.Fatal(err)
+	}
+	if next := controller.Run(); len(next.Allocations) != 0 {
+		t.Fatalf("committed allocation was repeated: %#v", next)
+	}
+}
