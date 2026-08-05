@@ -386,3 +386,20 @@ func TestRunWithReclaimAcceptsEmptyJobList(t *testing.T) {
 		t.Fatalf("unexpected empty reclaim plan: %#v", plan)
 	}
 }
+
+func TestRunWithReclaimOnlyFreesRemainingMinAvailable(t *testing.T) {
+	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 4}), Idle: api.NewResource(map[string]float64{})}}
+	queues := []api.Queue{
+		{Name: "training", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 4}), Reclaimable: true, Allocated: api.NewResource(map[string]float64{"gpu": 4})},
+		{Name: "inference", Weight: 2, Capability: api.NewResource(map[string]float64{"gpu": 4}), Guarantee: api.NewResource(map[string]float64{"gpu": 4}), Allocated: api.NewResource(map[string]float64{"gpu": 2})},
+	}
+	victims := make([]api.RunningTask, 4)
+	for index := range victims {
+		victims[index] = api.RunningTask{JobName: "old", Priority: 10, QueueName: "training", TaskIndex: index, NodeName: "n1", Request: api.NewResource(map[string]float64{"gpu": 1})}
+	}
+	job := &api.Job{Name: "partial", Priority: 100, Queue: "inference", Replicas: 4, MinAvailable: 4, ScheduledReplicas: 2, Allocated: api.NewResource(map[string]float64{"gpu": 2}), Request: api.NewResource(map[string]float64{"gpu": 1})}
+	plan := New(nodes).RunWithReclaim([]*api.Job{job}, queues, victims)
+	if len(plan.Evictions) != 2 || len(plan.Allocations) != 2 {
+		t.Fatalf("unexpected partial reclaim plan: %#v", plan)
+	}
+}
