@@ -175,7 +175,11 @@ func (s *Scheduler) RunWithReclaim(jobs []*api.Job, queues []api.Queue, victims 
 
 	priorityBlocked := false
 	need := api.NewResource(nil)
-	for replica := 0; replica < target.MinAvailable; replica++ {
+	remainingMin := target.MinAvailable - target.ScheduledReplicas
+	if remainingMin < 0 {
+		remainingMin = 0
+	}
+	for replica := 0; replica < remainingMin; replica++ {
 		need = need.Add(target.Request)
 	}
 	available := api.NewResource(nil)
