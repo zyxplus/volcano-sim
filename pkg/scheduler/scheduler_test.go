@@ -352,6 +352,9 @@ func TestRunWithQueuesReportsUnknownQueue(t *testing.T) {
 	if plan.Unschedulable["missing-queue-job"] != "queue not found" {
 		t.Fatalf("unexpected admission reason: %#v", plan.Unschedulable)
 	}
+	if len(plan.Issues) != 1 || plan.Issues[0].Severity != api.ValidationJobError || plan.Issues[0].Name != "missing-queue-job" {
+		t.Fatalf("unexpected validation issues: %#v", plan.Issues)
+	}
 }
 
 func TestRunWithQueuesRejectsDuplicateQueueNames(t *testing.T) {

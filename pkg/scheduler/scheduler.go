@@ -93,10 +93,12 @@ func (s *Scheduler) RunWithQueues(jobs []*api.Job, queues []api.Queue) api.Alloc
 	for _, job := range jobs {
 		if _, duplicated := duplicateQueues[job.Queue]; duplicated {
 			plan.Unschedulable[job.Name] = "queue duplicated"
+			plan.Issues = append(plan.Issues, api.ValidationIssue{Severity: api.ValidationJobError, Object: "job", Name: job.Name, Message: "queue duplicated"})
 			continue
 		}
 		if _, ok := knownQueues[job.Queue]; !ok {
 			plan.Unschedulable[job.Name] = "queue not found"
+			plan.Issues = append(plan.Issues, api.ValidationIssue{Severity: api.ValidationJobError, Object: "job", Name: job.Name, Message: "queue not found"})
 			continue
 		}
 		byQueue[job.Queue] = append(byQueue[job.Queue], job)
@@ -169,7 +171,7 @@ func (s *Scheduler) RunSessionDetailed(jobs []*api.Job, queues []api.Queue, vict
 		}
 
 		normal := s.RunWithQueues(pending, queues)
-		plan.Rounds = append(plan.Rounds, api.RoundPlan{Kind: "normal", Allocations: normal.Allocations, Evictions: normal.Evictions, Unschedulable: normal.Unschedulable})
+		plan.Rounds = append(plan.Rounds, api.RoundPlan{Kind: "normal", Allocations: normal.Allocations, Evictions: normal.Evictions, Unschedulable: normal.Unschedulable, Issues: normal.Issues})
 		if len(normal.Allocations) > 0 {
 			continue
 		}
@@ -182,11 +184,12 @@ func (s *Scheduler) RunSessionDetailed(jobs []*api.Job, queues []api.Queue, vict
 			for name, reason := range attempt.Unschedulable {
 				reclaimed.Unschedulable[name] = reason
 			}
+			reclaimed.Issues = append(reclaimed.Issues, attempt.Issues...)
 			if len(attempt.Allocations) > 0 {
 				break
 			}
 		}
-		plan.Rounds = append(plan.Rounds, api.RoundPlan{Kind: "reclaim", Allocations: reclaimed.Allocations, Evictions: reclaimed.Evictions, Unschedulable: reclaimed.Unschedulable})
+		plan.Rounds = append(plan.Rounds, api.RoundPlan{Kind: "reclaim", Allocations: reclaimed.Allocations, Evictions: reclaimed.Evictions, Unschedulable: reclaimed.Unschedulable, Issues: reclaimed.Issues})
 		if len(reclaimed.Allocations) == 0 {
 			break
 		}
