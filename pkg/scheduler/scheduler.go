@@ -219,6 +219,7 @@ func (s *Scheduler) RunWithReclaim(jobs []*api.Job, queues []api.Queue, victims 
 	}
 
 	priorityBlocked := false
+	selectedVictims := make(map[string]int)
 	need := api.NewResource(nil)
 	remainingMin := target.MinAvailable - target.ScheduledReplicas
 	if remainingMin < 0 {
@@ -239,6 +240,10 @@ func (s *Scheduler) RunWithReclaim(jobs []*api.Job, queues []api.Queue, victims 
 			priorityBlocked = true
 			continue
 		}
+		if victim.JobMinAvailable > 0 && victim.JobRunningReplicas > 0 &&
+			victim.JobRunningReplicas-selectedVictims[victim.JobName]-1 < victim.JobMinAvailable {
+			continue
+		}
 		index, ok := queueIndex[victim.QueueName]
 		if !ok || !queues[index].Reclaimable || !proportion.IsOverused(queues[index], deserved[victim.QueueName]) {
 			continue
@@ -248,6 +253,7 @@ func (s *Scheduler) RunWithReclaim(jobs []*api.Job, queues []api.Queue, victims 
 				s.nodes[nodeIndex].Idle = s.nodes[nodeIndex].Idle.Add(victim.Request)
 				available = available.Add(victim.Request)
 				queues[index].Allocated = queues[index].Allocated.Sub(victim.Request)
+				selectedVictims[victim.JobName]++
 				plan.Evictions = append(plan.Evictions, api.Eviction{JobName: victim.JobName, TaskIndex: victim.TaskIndex, NodeName: victim.NodeName, Reason: "reclaim"})
 				break
 			}

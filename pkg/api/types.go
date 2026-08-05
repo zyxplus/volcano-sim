@@ -54,6 +54,9 @@ type RunningTask struct {
 	TaskIndex int
 	NodeName  string
 	Request   Resource
+	// Optional Job-level state used to protect a victim Gang during reclaim.
+	JobMinAvailable    int
+	JobRunningReplicas int
 }
 
 // Allocation records a committed placement decision.

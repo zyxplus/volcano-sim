@@ -460,6 +460,24 @@ func TestRunWithReclaimOnlyFreesRemainingMinAvailable(t *testing.T) {
 	}
 }
 
+func TestReclaimPreservesVictimJobMinAvailable(t *testing.T) {
+	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 3}), Idle: api.NewResource(map[string]float64{})}}
+	queues := []api.Queue{
+		{Name: "training", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 3}), Reclaimable: true, Allocated: api.NewResource(map[string]float64{"gpu": 3})},
+		{Name: "inference", Weight: 2, Capability: api.NewResource(map[string]float64{"gpu": 3}), Guarantee: api.NewResource(map[string]float64{"gpu": 2})},
+	}
+	victims := []api.RunningTask{
+		{JobName: "old", Priority: 10, QueueName: "training", TaskIndex: 0, NodeName: "n1", Request: api.NewResource(map[string]float64{"gpu": 1}), JobMinAvailable: 2, JobRunningReplicas: 3},
+		{JobName: "old", Priority: 10, QueueName: "training", TaskIndex: 1, NodeName: "n1", Request: api.NewResource(map[string]float64{"gpu": 1}), JobMinAvailable: 2, JobRunningReplicas: 3},
+		{JobName: "old", Priority: 10, QueueName: "training", TaskIndex: 2, NodeName: "n1", Request: api.NewResource(map[string]float64{"gpu": 1}), JobMinAvailable: 2, JobRunningReplicas: 3},
+	}
+	job := &api.Job{Name: "new", Priority: 100, Queue: "inference", Replicas: 2, MinAvailable: 2, Request: api.NewResource(map[string]float64{"gpu": 1})}
+	plan := New(nodes).RunWithReclaim([]*api.Job{job}, queues, victims)
+	if len(plan.Allocations) != 0 || len(plan.Evictions) != 0 {
+		t.Fatalf("reclaim violated victim gang: %#v", plan)
+	}
+}
+
 func TestRunSessionTriesNextReclaimCandidateAfterFailure(t *testing.T) {
 	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 1}), Idle: api.NewResource(map[string]float64{})}}
 	queues := []api.Queue{
