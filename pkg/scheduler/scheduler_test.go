@@ -180,6 +180,15 @@ func TestReclaimEvictsOverusedReclaimableTaskForWaitingGang(t *testing.T) {
 	if len(plan.Evictions) != 1 || len(plan.Allocations) != 1 {
 		t.Fatalf("unexpected plan: %#v", plan)
 	}
+	var trainingAllocated float64
+	for _, queue := range queues {
+		if queue.Name == "training" {
+			trainingAllocated = queue.Allocated["gpu"]
+		}
+	}
+	if trainingAllocated != 0 {
+		t.Fatalf("successful reclaim did not persist source queue state: %#v", queues)
+	}
 }
 
 func TestReclaimEvictsLowerPriorityVictimFirst(t *testing.T) {
