@@ -27,11 +27,16 @@ func LoadQueues(path string) ([]api.Queue, error) {
 	if err := decode(path, &document); err != nil {
 		return nil, fmt.Errorf("load queues: %w", err)
 	}
+	seen := make(map[string]struct{}, len(document.Queues))
 	for index := range document.Queues {
 		queue := &document.Queues[index]
 		if queue.Name == "" || queue.Weight <= 0 {
 			return nil, fmt.Errorf("queue has invalid name or weight")
 		}
+		if _, exists := seen[queue.Name]; exists {
+			return nil, fmt.Errorf("queue %q is duplicated", queue.Name)
+		}
+		seen[queue.Name] = struct{}{}
 		if err := validateResource(queue.Name, "queue", queue.Capability); err != nil {
 			return nil, err
 		}
