@@ -84,6 +84,7 @@ func (c *SessionController) Apply(event SessionEvent) error {
 
 // Run creates a fresh Scheduler from the current input snapshot.
 func (c *SessionController) Run() api.AllocationPlan {
+	c.rebuildRuntimeState()
 	nodes := make([]api.Node, 0, len(c.nodes))
 	for _, spec := range c.nodes {
 		nodes = append(nodes, api.Node{Name: spec.Name, Capacity: api.NewResource(spec.Capacity), Labels: spec.Labels, Idle: api.NewResource(spec.Capacity)})
@@ -103,6 +104,28 @@ func (c *SessionController) Run() api.AllocationPlan {
 	}
 	sort.Slice(jobs, func(i, j int) bool { return jobs[i].Name < jobs[j].Name })
 	return New(nodes).RunSession(jobs, cloneQueues(c.queues), c.victims)
+}
+
+func (c *SessionController) rebuildRuntimeState() {
+	for _, job := range c.jobs {
+		job.ScheduledReplicas = 0
+		job.Allocated = api.NewResource(nil)
+	}
+	for index := range c.queues {
+		c.queues[index].Allocated = api.NewResource(nil)
+	}
+	for _, task := range c.victims {
+		if job, ok := c.jobs[task.JobName]; ok {
+			job.ScheduledReplicas++
+			job.Allocated = job.Allocated.Add(task.Request)
+		}
+		for index := range c.queues {
+			if c.queues[index].Name == task.QueueName {
+				c.queues[index].Allocated = c.queues[index].Allocated.Add(task.Request)
+				break
+			}
+		}
+	}
 }
 
 func cloneQueues(queues []api.Queue) []api.Queue {
