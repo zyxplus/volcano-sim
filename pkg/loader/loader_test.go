@@ -127,3 +127,18 @@ func TestLoadAssignsDefaultQueueToJobWithoutQueue(t *testing.T) {
 		t.Fatalf("queue = %q, want default", jobs[0].Queue)
 	}
 }
+
+func TestLoadRejectsDuplicateJobNames(t *testing.T) {
+	dir := t.TempDir()
+	nodesPath := filepath.Join(dir, "nodes.yaml")
+	jobsPath := filepath.Join(dir, "jobs.yaml")
+	if err := os.WriteFile(nodesPath, []byte("nodes:\n  - name: n1\n    capacity: {gpu: 2}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(jobsPath, []byte("jobs:\n  - name: train\n    minAvailable: 1\n    replicas: 1\n    request: {gpu: 1}\n  - name: train\n    minAvailable: 1\n    replicas: 1\n    request: {gpu: 1}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Load(nodesPath, jobsPath); err == nil {
+		t.Fatal("Load accepted duplicate job names")
+	}
+}

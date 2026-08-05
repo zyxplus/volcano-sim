@@ -63,6 +63,7 @@ func Load(nodesPath, jobsPath string) ([]api.Node, []api.Job, error) {
 	if err := decode(jobsPath, &jobDocument); err != nil {
 		return nil, nil, fmt.Errorf("load jobs: %w", err)
 	}
+	seenJobs := make(map[string]struct{}, len(jobDocument.Jobs))
 	for index := range jobDocument.Jobs {
 		job := &jobDocument.Jobs[index]
 		if job.Queue == "" {
@@ -71,6 +72,10 @@ func Load(nodesPath, jobsPath string) ([]api.Node, []api.Job, error) {
 		if job.Name == "" {
 			return nil, nil, fmt.Errorf("job has an empty name")
 		}
+		if _, exists := seenJobs[job.Name]; exists {
+			return nil, nil, fmt.Errorf("job %q is duplicated", job.Name)
+		}
+		seenJobs[job.Name] = struct{}{}
 		if job.MinAvailable <= 0 || job.MinAvailable > job.Replicas {
 			return nil, nil, fmt.Errorf("job %q has invalid minAvailable %d for %d replicas", job.Name, job.MinAvailable, job.Replicas)
 		}
