@@ -30,3 +30,20 @@ func ComputeDeserved(queues []api.Queue, total api.Resource) map[string]api.Reso
 
 // IsOverused reports whether allocated resource exceeds deserved resource.
 func IsOverused(queue api.Queue, deserved api.Resource) bool { return !queue.Allocated.Fits(deserved) }
+
+// Deficit returns the largest normalized resource gap between a Queue's
+// deserved and allocated resources. A larger value means the Queue is further
+// below its proportional share.
+func Deficit(queue api.Queue, deserved, total api.Resource) float64 {
+	var deficit float64
+	for name, capacity := range total {
+		if capacity <= 0 {
+			continue
+		}
+		gap := (deserved[name] - queue.Allocated[name]) / capacity
+		if gap > deficit {
+			deficit = gap
+		}
+	}
+	return deficit
+}

@@ -158,6 +158,26 @@ func TestRunSchedulesHigherWeightQueueFirst(t *testing.T) {
 	}
 }
 
+func TestRunWithQueuesUsesProportionDeficitAcrossQueues(t *testing.T) {
+	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 4})}}
+	queues := []api.Queue{
+		{Name: "small", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 4})},
+		{Name: "large", Weight: 3, Capability: api.NewResource(map[string]float64{"gpu": 4})},
+	}
+	jobs := []*api.Job{
+		{Name: "small-job", Queue: "small", Replicas: 4, MinAvailable: 1, BatchSize: 1, Request: api.NewResource(map[string]float64{"gpu": 1})},
+		{Name: "large-job", Queue: "large", Replicas: 4, MinAvailable: 1, BatchSize: 1, Request: api.NewResource(map[string]float64{"gpu": 1})},
+	}
+	plan := New(nodes).RunWithQueues(jobs, queues)
+	counts := map[string]int{}
+	for _, allocation := range plan.Allocations {
+		counts[allocation.JobName]++
+	}
+	if counts["small-job"] != 1 || counts["large-job"] != 3 {
+		t.Fatalf("unexpected proportion allocation: %#v", plan.Allocations)
+	}
+}
+
 func TestRunWithQueuesRejectsGangExceedingCapability(t *testing.T) {
 	nodes := []api.Node{{Name: "n1", Capacity: api.NewResource(map[string]float64{"gpu": 8})}}
 	queues := []api.Queue{{Name: "limited", Weight: 1, Capability: api.NewResource(map[string]float64{"gpu": 4})}}
